@@ -6,7 +6,7 @@ import feedparser
 from textblob import TextBlob
 import numpy as np
 
-# --- 🎯 銘柄リスト ---
+# --- 🎯 銘柄リスト（ニュース検索ワード付き） ---
 STOCKS_US = [
     {"ticker": "NVDA", "name": "NVIDIA", "currency": "$", "query": "NVIDIA stock"},
     {"ticker": "AAPL", "name": "Apple", "currency": "$", "query": "Apple stock"},
@@ -27,28 +27,30 @@ STOCKS_JP = [
     {"ticker": "9983.T", "name": "Fast Retailing", "currency": "¥", "query": "Fast Retailing stock"}
 ]
 
-# --- 1. ニュース分析機能 (New!) ---
+# --- 1. ニュース分析機能 (ここを修正しました！) ---
 def get_news_sentiment(query):
     """
-    Googleニュース(RSS)から最新記事を取得し、
-    ポジティブ(プラス)かネガティブ(マイナス)かを数値化する
+    Googleニュースから感情分析を行う
     """
-    # URLエンコードされたRSSフィード (英語ニュースを取得)
-    rss_url = f"https://news.google.com/rss/search?q={query}+when:1d&hl=en-US&gl=US&ceid=US:en"
-    feed = feedparser.parse(rss_url)
+    # ★修正ポイント：URL内のスペースを「+」に変換してエラーを防ぐ
+    safe_query = query.replace(" ", "+")
     
-    sentiments = []
-    # 最新5件の記事タイトルを分析
-    for entry in feed.entries[:5]:
-        analysis = TextBlob(entry.title)
-        sentiments.append(analysis.sentiment.polarity)
+    rss_url = f"https://news.google.com/rss/search?q={safe_query}+when:1d&hl=en-US&gl=US&ceid=US:en"
     
-    if not sentiments:
-        return 0.0 # ニュースなし
+    try:
+        feed = feedparser.parse(rss_url)
+        sentiments = []
+        for entry in feed.entries[:5]:
+            analysis = TextBlob(entry.title)
+            sentiments.append(analysis.sentiment.polarity)
         
-    # 平均スコア (-1.0 〜 +1.0)
-    avg_score = sum(sentiments) / len(sentiments)
-    return avg_score
+        if not sentiments:
+            return 0.0
+            
+        return sum(sentiments) / len(sentiments)
+    except Exception as e:
+        print(f"News Error ({query}): {e}")
+        return 0.0
 
 # --- 2. データ取得 ---
 def get_data(ticker, start="2015-01-01"):
@@ -62,13 +64,12 @@ def get_data(ticker, start="2015-01-01"):
 # --- 3. テクニカル分析 ---
 def add_indicators(df):
     df = df.copy()
-    # RSI
     delta = df["Close"].diff()
     gain = (delta.where(delta > 0, 0)).rolling(14).mean()
     loss = (-delta.where(delta < 0, 0)).rolling(14).mean()
     rs = gain / loss
     df["RSI"] = 100 - (100 / (1 + rs))
-    # MACD
+    
     exp12 = df["Close"].ewm(span=12).mean()
     exp26 = df["Close"].ewm(span=26).mean()
     df["MACD"] = exp12 - exp26
@@ -82,30 +83,29 @@ def analyze_market():
     df = add_indicators(df)
     rsi = df["RSI"].iloc[-1]
     
-    # ニュース分析も加える（市場全体）
+    # ニュース分析（ここもスペース対策済み）
     news_score = get_news_sentiment("Stock Market US")
     
-    status = "Neutral / Stable"
+    status = "Neutral"
     icon = "⚖️"
     
     if rsi > 70: 
         status = "Overheated"
         icon = "🔥"
     elif rsi < 30: 
-        status = "Bargain Zone"
+        status = "Bargain"
         icon = "💎"
         
-    # ニュースが極端に悪い場合は警告
     if news_score < -0.2:
-        status += " (News: Negative ☁️)"
+        status += " (News: Bad ☁️)"
         icon = "🐻⚠️"
     elif news_score > 0.2:
-        status += " (News: Positive ☀️)"
+        status += " (News: Good ☀️)"
         icon = "🐂✅"
         
     return status, icon
 
-# --- 5. 予測ロジック (ニュース融合版) ---
+# --- 5. 予測ロジック ---
 def predict_stock(stock_info):
     ticker = stock_info["ticker"]
     df = get_data(ticker)
@@ -113,7 +113,6 @@ def predict_stock(stock_info):
 
     df = add_indicators(df)
     
-    # テクニカル指標に基づく予測
     future_return = (df["Close"].shift(-5) - df["Close"]) / df["Close"]
     df["Target"] = (future_return > 0.01).astype(int)
     df.dropna(inplace=True)
@@ -121,28 +120,22 @@ def predict_stock(stock_info):
     model = RandomForestClassifier(n_estimators=100, max_depth=5, random_state=42)
     model.fit(df[["RSI", "MACD"]].iloc[:-5], df["Target"].iloc[:-5])
     
-    # ベースの確率（テクニカル）
     tech_score = model.predict_proba(df[["RSI", "MACD"]].iloc[-1:])[0][1] * 100
     
-    # ★ここでニュース分析を実行！
+    # ニュース分析実行
     news_score = get_news_sentiment(stock_info["query"])
-    
-    # ニューススコア(-1.0〜1.0)を補正値(-10%〜+10%)に変換
     news_adjustment = news_score * 10 
     
-    # 最終スコア（テクニカル + ニュース補正）
-    final_score = tech_score + news_adjustment
-    final_score = max(0, min(100, final_score)) # 0-100の範囲に収める
+    final_score = max(0, min(100, tech_score + news_adjustment))
     
     if final_score >= 60: grade = "S 🚀"
     elif final_score >= 50: grade = "A ↗️"
     elif final_score >= 40: grade = "B ➡️"
     else: grade = "C ↘️"
     
-    # ニュースの影響を表示用アイコンにする
     news_icon = "⚪"
-    if news_score > 0.1: news_icon = "☀️" # 良いニュース多め
-    if news_score < -0.1: news_icon = "☁️" # 悪いニュース多め
+    if news_score > 0.1: news_icon = "☀️"
+    if news_score < -0.1: news_icon = "☁️"
     
     return {
         "name": stock_info["name"],
@@ -171,7 +164,6 @@ def update_readme(market_status, res_us, res_jp):
     
 ## 🌍 Global Market Context
 **Status:** {market_status[1]} **{market_status[0]}**
-*Checked latest news sentiment for overall market.*
 
 ---
 
@@ -186,9 +178,9 @@ def update_readme(market_status, res_us, res_jp):
 {make_table(res_jp)}
 
 ### 💡 Legend
-- **News:** ☀️=Positive News, ☁️=Negative News, ⚪=Neutral
-- **Conf:** Adjusted by Technicals ± News Sentiment
-- **Schedule:** Updates 4 times daily (Every 6 hours)
+- **News:** ☀️=Good, ☁️=Bad, ⚪=Neutral
+- **Conf:** Tech Score ± News Sentiment
+- **Schedule:** Updates every 6 hours
 
 ---
 *Updated: {now}*
@@ -203,14 +195,20 @@ def main():
     res_us = []
     print("--- Predicting US Stocks ---")
     for s in STOCKS_US:
-        r = predict_stock(s)
-        if r: res_us.append(r)
+        try:
+            r = predict_stock(s)
+            if r: res_us.append(r)
+        except Exception as e:
+            print(f"Error {s['name']}: {e}")
         
     res_jp = []
     print("--- Predicting Japan Stocks ---")
     for s in STOCKS_JP:
-        r = predict_stock(s)
-        if r: res_jp.append(r)
+        try:
+            r = predict_stock(s)
+            if r: res_jp.append(r)
+        except Exception as e:
+            print(f"Error {s['name']}: {e}")
             
     update_readme(status, res_us, res_jp)
     print("Done!")
