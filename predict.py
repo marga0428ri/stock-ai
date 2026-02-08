@@ -9,37 +9,24 @@ import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 import os
+import io
+import requests
 
 # ==========================================
-# 👇 スプレッドシートのURL (使う場合)
+# 👇 2つのスプレッドシート設定
 # ==========================================
-SHEET_URL = "https://docs.google.com/spreadsheets/d/10MtVu1vgAq0qJ0-O0lxHMy29_EZ7uG3-cSQlcXd0FUY/edit?usp=drivesdk" 
+# 1. 買った株 (My Portfolio)
+PORTFOLIO_ID = "10MtVu1vgAq0qJ0-O0lxHMy29_EZ7uG3-cSQlcXd0FUY"
+PORTFOLIO_URL = f"https://docs.google.com/spreadsheets/d/{PORTFOLIO_ID}/pub?output=csv"
 
-# --- 🧪 テスト用データ ---
+# 2. 気になる株 (Watch List)
+WATCHLIST_ID = "1xLSJ_neFSs_1_huTZ_zW4pYDYLzcx-iFE77mOpZUT2U"
+WATCHLIST_URL = f"https://docs.google.com/spreadsheets/d/{WATCHLIST_ID}/pub?output=csv"
+
+# --- 🧪 テスト用データ (シート読み込み失敗時の保険) ---
 TEST_PORTFOLIO = [
     {"ticker": "NVDA", "name": "NVIDIA", "buy_price": 50.0, "amount": 20, "currency": "$", "queries": ["NVIDIA stock", "AI chip demand"]},
-    {"ticker": "AAPL", "name": "Apple", "buy_price": 180.0, "amount": 10, "currency": "$", "queries": ["Apple stock", "iPhone sales"]},
-    {"ticker": "TSLA", "name": "Tesla", "buy_price": 400.0, "amount": 15, "currency": "$", "queries": ["Tesla stock", "EV market"]},
-    {"ticker": "7974.T", "name": "任天堂", "buy_price": 6000, "amount": 100, "currency": "¥", "queries": ["任天堂 株価", "Switch 後継機"]},
-    {"ticker": "7203.T", "name": "トヨタ", "buy_price": 2000, "amount": 200, "currency": "¥", "queries": ["トヨタ自動車", "円安 影響"]},
-    {"ticker": "9984.T", "name": "SBG", "buy_price": 9000, "amount": 100, "currency": "¥", "queries": ["ソフトバンクグループ", "AI投資"]},
-    {"ticker": "6758.T", "name": "ソニー", "buy_price": 15000, "amount": 100, "currency": "¥", "queries": ["ソニーグループ", "PS5 販売"]}
-]
-
-MARKET_WORLD = [
-    {"ticker": "MSFT", "name": "Microsoft", "currency": "$", "queries": ["Microsoft stock", "Azure cloud"]},
-    {"ticker": "GOOGL", "name": "Google", "currency": "$", "queries": ["Google stock", "Gemini AI"]},
-    {"ticker": "AMZN", "name": "Amazon", "currency": "$", "queries": ["Amazon stock", "AWS cloud"]},
-    {"ticker": "META", "name": "Meta", "currency": "$", "queries": ["Meta stock", "AI investment"]},
-    {"ticker": "LLY", "name": "Eli Lilly", "currency": "$", "queries": ["Eli Lilly stock", "obesity drug"]}
-]
-
-MARKET_JAPAN = [
-    {"ticker": "8035.T", "name": "東エレク", "currency": "¥", "queries": ["東京エレクトロン", "半導体製造装置"]},
-    {"ticker": "9983.T", "name": "ファストリ", "currency": "¥", "queries": ["ファーストリテイリング", "ユニクロ 売上"]},
-    {"ticker": "6861.T", "name": "キーエンス", "currency": "¥", "queries": ["キーエンス", "FAセンサー"]},
-    {"ticker": "6098.T", "name": "リクルート", "currency": "¥", "queries": ["リクルート", "Indeed"]},
-    {"ticker": "8306.T", "name": "三菱UFJ", "currency": "¥", "queries": ["三菱UFJ", "金利政策"]}
+    {"ticker": "7203.T", "name": "トヨタ", "buy_price": 2000, "amount": 200, "currency": "¥", "queries": ["トヨタ自動車", "円安 影響"]}
 ]
 
 # --- 📧 メール通知機能 ---
@@ -68,28 +55,43 @@ def send_email_notify(subject, body):
     except Exception as e:
         print(f"❌ メールエラー: {e}")
 
-# --- 1. データ読み込み ---
-def load_portfolio():
-    print("\n📦 ポートフォリオ読み込み...")
-    portfolio = []
-    if SHEET_URL:
-        try:
-            df = pd.read_csv(SHEET_URL)
-            for index, row in df.iterrows():
-                if pd.isna(row["Ticker"]): continue
+# --- 1. データ読み込み (共通関数) ---
+def load_sheet_data(url, is_watchlist=False):
+    print(f"\n📦 シート読み込み中: {url[:50]}...")
+    data_list = []
+    try:
+        response = requests.get(url)
+        response.raise_for_status()
+        df = pd.read_csv(io.StringIO(response.text))
+        
+        for index, row in df.iterrows():
+            if pd.isna(row.get("Ticker")): continue
+            
+            # クエリの処理
+            queries = []
+            if "Query" in row and not pd.isna(row["Query"]):
                 queries = [q.strip() for q in str(row["Query"]).split(",")]
-                item = {
-                    "ticker": str(row["Ticker"]).strip(),
-                    "name": str(row["Name"]),
-                    "buy_price": float(row["BuyPrice"]),
-                    "amount": int(row["Amount"]),
-                    "currency": str(row["Currency"]).strip(),
-                    "queries": queries
-                }
-                portfolio.append(item)
-            return portfolio
-        except: pass
-    return TEST_PORTFOLIO
+            else:
+                queries = [f"{row['Ticker']} stock news"] # デフォルト
+            
+            item = {
+                "ticker": str(row["Ticker"]).strip(),
+                "name": str(row.get("Name", row["Ticker"])),
+                "currency": str(row.get("Currency", "$")).strip(),
+                "queries": queries
+            }
+
+            # ポートフォリオ専用データ (Watchlistには不要)
+            if not is_watchlist:
+                item["buy_price"] = float(row.get("BuyPrice", 0))
+                item["amount"] = int(row.get("Amount", 0))
+            
+            data_list.append(item)
+        print(f"   ✅ {len(data_list)} 件読み込み成功")
+        return data_list
+    except Exception as e:
+        print(f"   ❌ 読み込み失敗: {e}")
+        return []
 
 # --- 2. ニュース分析 ---
 KEYWORDS_WEIGHT = {
@@ -131,16 +133,14 @@ def analyze_deep_news(queries):
 # --- 3. データ取得 ---
 def get_market_data(ticker):
     try:
-        # 過去2年分 (730日)
         df = yf.download(ticker, period="2y", progress=False)
         if isinstance(df.columns, pd.MultiIndex):
             df.columns = df.columns.get_level_values(0)
         return df
     except: return pd.DataFrame()
 
-# --- 4. ★テクニカル分析 (最高値・RSI) ---
+# --- 4. テクニカル分析 ---
 def analyze_technical(df):
-    # RSI (14日) の計算
     delta = df["Close"].diff()
     gain = (delta.where(delta > 0, 0)).rolling(14).mean()
     loss = (-delta.where(delta < 0, 0)).rolling(14).mean()
@@ -148,10 +148,9 @@ def analyze_technical(df):
     rsi = 100 - (100 / (1 + rs))
     current_rsi = rsi.iloc[-1]
     
-    # 最高値からの下落率 (Drawdown) - 過去1年
     max_price = df["Close"].rolling(252).max().iloc[-1]
     current_price = df["Close"].iloc[-1]
-    drawdown = (current_price - max_price) / max_price # マイナスの値になる (-0.1 = -10%)
+    drawdown = (current_price - max_price) / max_price
     
     return current_rsi, drawdown
 
@@ -183,68 +182,68 @@ def analyze_stock(stock_info, is_portfolio=False):
     df = get_market_data(ticker)
     if df.empty or len(df) < 252: return None
     
-    # 各種分析
     sentiment, art_count = analyze_deep_news(stock_info["queries"])
     sensitivity = calculate_sensitivity(df)
     vol_shock, panic_level = analyze_vectors(df)
-    rsi, drawdown = analyze_technical(df) # ★追加: チャート分析
+    rsi, drawdown = analyze_technical(df)
     
-    # トレンド
     sma5 = df["Close"].rolling(5).mean().iloc[-1]
     sma20 = df["Close"].rolling(20).mean().iloc[-1]
     trend = (sma5 - sma20) / sma20
     
-    # ★利益予想の計算 (RSIと最高値も考慮)★
     volume_boost = 1.5 if vol_shock > 1.5 else 1.0
     
-    # チャート要因の補正
-    # RSI > 75 (買われすぎ) なら下落圧力、RSI < 30 (売られすぎ) なら上昇圧力
     rsi_pressure = 0
     if rsi > 75: rsi_pressure = -0.5
     elif rsi < 30: rsi_pressure = 0.5
     
-    # 最高値に近い(Drawdown > -0.05)なら、ブレイクアウト期待でプラス
-    # 逆に大きく落ちている(-0.3)なら、反発期待でプラス
-    # 中途半端(-0.15)な位置が一番動きにくい
     drawdown_factor = 0
-    if drawdown > -0.05: drawdown_factor = 0.2 # 高値更新期待
-    elif drawdown < -0.30: drawdown_factor = 0.3 # バーゲンセール
+    if drawdown > -0.05: drawdown_factor = 0.2
+    elif drawdown < -0.30: drawdown_factor = 0.3
     
-    # 最終スコア
     impact_power = sentiment * panic_level * sensitivity * volume_boost * 4.0
     exp_profit_pct = (trend * 0.2) + impact_power + (rsi_pressure * 0.01) + (drawdown_factor * 0.01)
     exp_profit_pct = max(-0.15, min(0.15, exp_profit_pct)) * 100
     
-    print(f"      💰 予想: {exp_profit_pct:+.2f}% (RSI:{rsi:.0f}, Drop:{drawdown*100:.1f}%)")
+    print(f"      💰 予想: {exp_profit_pct:+.2f}%")
 
-    # アクション判定
+    # アクションの言葉を分かりやすく変更
     ai_action = "WAIT"
-    if exp_profit_pct > 1.0: ai_action = "BUY"
-    if exp_profit_pct > 3.0: ai_action = "STRONG BUY"
-    if exp_profit_pct < -1.0: ai_action = "SELL"
-    if exp_profit_pct < -3.0: ai_action = "STRONG SELL"
+    action_emoji = "⚪"
+    if exp_profit_pct > 1.0: 
+        ai_action = "BUY"
+        action_emoji = "🔵"
+    if exp_profit_pct > 3.0: 
+        ai_action = "STRONG BUY"
+        action_emoji = "🚀"
+    if exp_profit_pct < -1.0: 
+        ai_action = "SELL"
+        action_emoji = "🔴"
+    if exp_profit_pct < -3.0: 
+        ai_action = "STRONG SELL"
+        action_emoji = "⚡"
 
     current_price = df["Close"].iloc[-1]
-    portfolio_advice = ""
+    portfolio_advice = "-"
     profit_loss = 0
+    profit_loss_pct = 0
     
     if is_portfolio:
         buy_price = stock_info["buy_price"]
         amount = stock_info["amount"]
-        profit_loss = (current_price - buy_price) * amount
-        profit_loss_pct = (current_price - buy_price) / buy_price * 100
-        
-        # アドバイスロジック (RSIも考慮)
-        if "BUY" in ai_action:
-            if profit_loss > 0: portfolio_advice = "Extend Gains"
-            else: portfolio_advice = "Buy Dip"
-        elif "SELL" in ai_action:
-            if profit_loss > 0: portfolio_advice = "Take Profit"
-            else: portfolio_advice = "Stop Loss"
-        else:
-            # RSIが高すぎる場合の警告
-            if rsi > 80: portfolio_advice = "Overheated (Caution)"
-            else: portfolio_advice = "Watch"
+        if buy_price > 0:
+            profit_loss = (current_price - buy_price) * amount
+            profit_loss_pct = (current_price - buy_price) / buy_price * 100
+            
+            if "BUY" in ai_action:
+                if profit_loss > 0: portfolio_advice = "利益拡大チャンス (Extend)"
+                else: portfolio_advice = "押し目買い/耐える (Hold/Buy)"
+            elif "SELL" in ai_action:
+                if profit_loss > 0: portfolio_advice = "利益確定推奨 (Take Profit)"
+                else: portfolio_advice = "損切り検討 (Stop Loss)"
+            else:
+                if rsi > 80: portfolio_advice = "加熱注意 (Caution)"
+                else: portfolio_advice = "様子見 (Watch)"
 
     vol_icon = "❗" if vol_shock > 1.5 else ""
     news_icon = "☀️" if sentiment > 0.3 else ("☁️" if sentiment < -0.3 else "⚪")
@@ -254,6 +253,7 @@ def analyze_stock(stock_info, is_portfolio=False):
         "price": current_price,
         "currency": stock_info["currency"],
         "action": ai_action,
+        "emoji": action_emoji,
         "exp_profit": exp_profit_pct,
         "sentiment": sentiment,
         "news_icon": news_icon,
@@ -262,119 +262,136 @@ def analyze_stock(stock_info, is_portfolio=False):
         "vol_shock": vol_shock,
         "vol_icon": vol_icon,
         "rsi": rsi,
-        "drawdown": drawdown * 100, # %表示
+        "drawdown": drawdown * 100,
         "pl_amount": profit_loss,
-        "pl_pct": profit_loss_pct if is_portfolio else 0,
+        "pl_pct": profit_loss_pct,
         "advice": portfolio_advice
     }
 
 # --- 8. レポート作成 & 通知 ---
-def update_readme_and_notify(my_results, world_results, japan_results):
+def update_readme_and_notify(my_results, watch_results):
     now = datetime.now().strftime("%Y-%m-%d %H:%M (UTC)")
+    
+    # 資産計算
     total_pl_usd = sum([r["pl_amount"] for r in my_results if r["currency"] == "$"])
     total_pl_jpy = sum([r["pl_amount"] for r in my_results if r["currency"] == "¥"])
 
-    # メール作成
+    # メール本文
     email_body = f"AI Stock Report - {now}\n\n"
     notify_needed = False
 
-    email_body += "--- 💰 Portfolio Check ---\n"
+    email_body += "--- 💰 My Portfolio Analysis ---\n"
     for r in my_results:
-        if "STRONG" in r["action"] or r["vol_shock"] > 1.5 or r["rsi"] > 80 or r["rsi"] < 20:
+        if "STRONG" in r["action"] or r["vol_shock"] > 1.5 or "Stop Loss" in r["advice"]:
             notify_needed = True
-            
+        
         pl_mark = "🟢" if r["pl_amount"] > 0 else "🔴"
-        email_body += f"■ {r['name']}: {r['action']} ({r['advice']})\n"
-        email_body += f"   P/L: {r['currency']}{r['pl_amount']:+,.0f} {pl_mark}\n"
-        email_body += f"   RSI: {r['rsi']:.0f} / Drop: {r['drawdown']:.1f}%\n\n"
+        email_body += f"■ {r['name']}: {r['emoji']} {r['action']}\n"
+        email_body += f"   Advice: {r['advice']}\n"
+        email_body += f"   P/L: {r['currency']}{r['pl_amount']:+,.0f} {pl_mark}\n\n"
 
-    email_body += "--- 🌍 Market Watch ---\n"
-    for r in world_results + japan_results:
+    email_body += "--- 👀 Watch List Opportunities ---\n"
+    for r in watch_results:
         if "STRONG" in r["action"]:
             notify_needed = True
-            email_body += f"★ {r['name']}: {r['action']} (Exp: {r['exp_profit']:+.2f}%)\n"
+            email_body += f"★ {r['name']}: {r['emoji']} {r['action']} (Exp: {r['exp_profit']:+.2f}%)\n"
 
     if notify_needed:
         print("🔔 通知条件クリア: メール送信")
-        send_email_notify("Important Market Updates", email_body)
+        send_email_notify("Market Update", email_body)
     else:
         print("⚪ 通知なし")
 
-    # README更新
-    def make_table(results, table_type):
-        if not results: return "No data."
-        if table_type == "MY_PORTFOLIO":
-            header = "| Action | Stock | Your P/L | Advice | Exp. Move | Chart (RSI/Drop) |\n| :--- | :--- | :--- | :--- | :--- | :--- |\n"
-        else:
-            header = "| Action | Stock | Price | Exp. Move | Chart (RSI/Drop) | News |\n| :--- | :--- | :--- | :--- | :--- | :--- |\n"
+    # --- デザイン重視のテーブル作成 ---
+    def make_portfolio_table(results):
+        if not results: return "データがありません。"
+        # ヘッダー：シンプルに
+        header = "| Signal | Stock | P/L (損益) | AI Advice | Data (Exp/RSI) |\n| :---: | :--- | :--- | :--- | :--- |\n"
         rows = ""
         results.sort(key=lambda x: x["exp_profit"], reverse=True)
+        
         for r in results:
-            prof_str = f"{r['exp_profit']:+.2f}%"
-            if r['exp_profit'] > 0: prof_str = f"**{prof_str}**"
+            # 損益の色分け
+            pl_str = f"{r['currency']}{r['pl_amount']:+,.0f} <br> ({r['pl_pct']:+.1f}%)"
+            pl_icon = "🟢" if r['pl_amount'] >= 0 else "🔴"
             
-            # Chart Metrics (RSIと下落率)
-            chart_metrics = f"RSI:{r['rsi']:.0f} / Drop:{r['drawdown']:.1f}%"
-            if r['rsi'] > 75: chart_metrics += " 🔥" # 加熱
-            if r['rsi'] < 30: chart_metrics += " 💎" # バーゲン
+            # 詳細データ（小さくまとめる）
+            details = f"Exp: **{r['exp_profit']:+.1f}%** <br> RSI: {r['rsi']:.0f}"
             
-            if table_type == "MY_PORTFOLIO":
-                pl_str = f"{r['currency']}{r['pl_amount']:+,.0f} ({r['pl_pct']:+.1f}%)"
-                if r['pl_amount'] > 0: pl_str = f"**{pl_str}** 🟢"
-                else: pl_str = f"{pl_str} 🔴"
-                rows += f"| {r['action']} | {r['name']} | {pl_str} | **{r['advice']}** | {prof_str} | {chart_metrics} |\n"
-            else:
-                rows += f"| {r['action']} | {r['name']} | {r['currency']}{r['price']:,.0f} | {prof_str} | {chart_metrics} | {r['news_icon']} ({r['articles']}) |\n"
+            rows += f"| {r['emoji']} **{r['action']}** | **{r['name']}** | {pl_icon} {pl_str} | {r['advice']} | {details} |\n"
         return header + rows
 
-    content = f"""# 🏛️ Deep Impact Portfolio (Chart Master)
+    def make_watchlist_table(results):
+        if not results: return "データがありません。"
+        header = "| Signal | Stock | Price | Exp. Move | Analysis |\n| :---: | :--- | :--- | :--- | :--- |\n"
+        rows = ""
+        results.sort(key=lambda x: x["exp_profit"], reverse=True)
+        
+        for r in results:
+            price_str = f"{r['currency']}{r['price']:,.0f}"
+            exp_str = f"**{r['exp_profit']:+.2f}%**"
+            
+            # 分析アイコンまとめ
+            analysis = f"{r['news_icon']} News <br> RSI: {r['rsi']:.0f}"
+            if r['vol_shock'] > 1.5: analysis += f" <br> ❗ Vol: x{r['vol_shock']:.1f}"
+            
+            rows += f"| {r['emoji']} **{r['action']}** | **{r['name']}** | {price_str} | {exp_str} | {analysis} |\n"
+        return header + rows
+
+    content = f"""# 📊 AI Investment Dashboard
 *Updated: {now}*
 
-## 💰 My Assets
+## 💰 My Portfolio (保有資産)
 **Total P/L:** USD **${total_pl_usd:+,.2f}** / JPY **¥{total_pl_jpy:+,.0f}**
-{make_table(my_results, "MY_PORTFOLIO")}
+
+{make_portfolio_table(my_results)}
 
 ---
-## 🌎 World Market
-{make_table(world_results, "MARKET")}
+
+## 👀 Watch List (気になる株)
+**Market Opportunities**
+
+{make_watchlist_table(watch_results)}
 
 ---
-## 🇯🇵 Japan Market
-{make_table(japan_results, "MARKET")}
-
----
-### 💡 Guide
-* **RSI (0-100):**
-    * `>70`: Overheated 🔥 (Risk of drop).
-    * `<30`: Oversold 💎 (Chance to buy).
-* **Drop (Drawdown):** How much % down from 1-year High.
-* **Advice:** AI combines News, Trends, and Chart Levels.
+### 💡 Dashboard Guide
+* **Signal:**
+    * 🚀 **STRONG BUY**: 強い買いシグナル (+3%以上予想)
+    * 🔵 **BUY**: 上昇トレンド (+1%以上予想)
+    * ⚪ **WAIT**: 様子見
+    * 🔴 **SELL**: 下落警戒 (-1%以下予想)
+    * ⚡ **STRONG SELL**: 暴落警戒 (-3%以下予想)
+* **AI Advice:** 保有株に対する具体的なアクション提案
+* **Exp:** 明日の予想変動率 (Expected Move)
 """
     with open("README.md", "w", encoding="utf-8") as f:
         f.write(content)
 
 def main():
     print("--- 🚀 AI Stock Analyst Starting ---")
-    my_portfolio = load_portfolio()
+    
+    # 1. 持ち株の読み込み
+    my_portfolio = load_sheet_data(PORTFOLIO_URL, is_watchlist=False)
+    if not my_portfolio: my_portfolio = TEST_PORTFOLIO # 保険
+    
+    # 2. 気になる株の読み込み
+    watch_list = load_sheet_data(WATCHLIST_URL, is_watchlist=True)
+    
+    # 3. 分析実行
     my_results = []
     print("\n--- 💰 Analyzing My Portfolio ---")
     for s in my_portfolio:
         res = analyze_stock(s, is_portfolio=True)
         if res: my_results.append(res)
     
-    print("\n--- 🌎 Analyzing World Market ---")
-    world_results = []
-    for s in MARKET_WORLD:
+    watch_results = []
+    print("\n--- 👀 Analyzing Watch List ---")
+    for s in watch_list:
         res = analyze_stock(s, is_portfolio=False)
-        if res: world_results.append(res)
-        
-    print("\n--- 🇯🇵 Analyzing Japan Market ---")
-    japan_results = []
-    for s in MARKET_JAPAN:
-        res = analyze_stock(s, is_portfolio=False)
-        if res: japan_results.append(res)
+        if res: watch_results.append(res)
             
-    update_readme_and_notify(my_results, world_results, japan_results)
+    # 4. レポート更新
+    update_readme_and_notify(my_results, watch_results)
     print("\n--- ✅ All Analysis Completed ---")
 
 if __name__ == "__main__":
