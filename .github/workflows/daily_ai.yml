@@ -2,27 +2,35 @@ name: Daily Stock Prediction
 
 on:
   schedule:
-    # 毎日 日本時間 朝9:00 (UTC 0:00) に実行
-    - cron: '0 0 * * *'
-  workflow_dispatch: # 手動ボタンでも実行できるようにする設定
+    - cron: '0 0 * * *' # 毎日UTC0時（日本時間朝9時）に実行
+  workflow_dispatch: # 手動実行ボタン
+
+permissions:
+  contents: write  # ★ここが最重要！「書き込み許可」を与える行
 
 jobs:
   run-prediction:
     runs-on: ubuntu-latest
 
     steps:
-      - name: リポジトリを取得
+      - name: Checkout repository
         uses: actions/checkout@v3
 
-      - name: Pythonをセットアップ
+      - name: Set up Python
         uses: actions/setup-python@v4
         with:
           python-version: '3.9'
 
-      - name: 必要なライブラリをインストール
-        run: |
-          pip install pandas yfinance scikit-learn
+      - name: Install dependencies
+        run: pip install pandas yfinance scikit-learn
 
-      - name: 予測を実行 (predict.py)
+      - name: Run prediction
+        run: python predict.py
+
+      - name: Commit and Push results
         run: |
-          python predict.py
+          git config --global user.name "GitHub Actions"
+          git config --global user.email "actions@github.com"
+          git add README.md
+          # 変更がある時だけコミットする設定
+          git diff --quiet && git diff --staged --quiet || (git commit -m "Update prediction results" && git push)
