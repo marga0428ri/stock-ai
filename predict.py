@@ -4,170 +4,152 @@ from datetime import datetime
 from sklearn.ensemble import RandomForestClassifier
 import numpy as np
 
-TICKERS = ["AAPL", "NVDA", "MSFT", "TSLA", "GOOGL", "AMZN"]
+# --- 🎯 銘柄リスト（2つのグループに分離） ---
+# 🇺🇸 米国・世界株
+STOCKS_US = [
+    {"ticker": "NVDA", "name": "NVIDIA", "currency": "$"},
+    {"ticker": "AAPL", "name": "Apple", "currency": "$"},
+    {"ticker": "MSFT", "name": "Microsoft", "currency": "$"},
+    {"ticker": "TSLA", "name": "Tesla", "currency": "$"},
+    {"ticker": "AMZN", "name": "Amazon", "currency": "$"},
+    {"ticker": "GOOGL", "name": "Google", "currency": "$"},
+    {"ticker": "LLY", "name": "Eli Lilly", "currency": "$"}
+]
+
+# 🇯🇵 日本株 (Code + .T)
+STOCKS_JP = [
+    {"ticker": "7203.T", "name": "Toyota", "currency": "¥"},
+    {"ticker": "6758.T", "name": "Sony Group", "currency": "¥"},
+    {"ticker": "7974.T", "name": "Nintendo", "currency": "¥"},
+    {"ticker": "9984.T", "name": "SoftBank G", "currency": "¥"},
+    {"ticker": "8035.T", "name": "Tokyo Electron", "currency": "¥"},
+    {"ticker": "6861.T", "name": "Keyence", "currency": "¥"},
+    {"ticker": "9983.T", "name": "Fast Retailing", "currency": "¥"}
+]
 
 # --- 1. データ取得 ---
-def get_data(ticker, start="2010-01-01"):
+def get_data(ticker, start="2015-01-01"):
     try:
         df = yf.download(ticker, start=start, progress=False)
         if isinstance(df.columns, pd.MultiIndex):
             df.columns = df.columns.get_level_values(0)
         return df
-    except Exception as e:
-        print(f"Error fetching {ticker}: {e}")
-        return pd.DataFrame()
+    except: return pd.DataFrame()
 
-# --- 2. テクニカル指標の計算（ここが強化ポイント！） ---
-def add_technical_indicators(df):
+# --- 2. テクニカル分析 ---
+def add_indicators(df):
     df = df.copy()
-    
-    # 移動平均線
-    df["SMA_5"] = df["Close"].rolling(window=5).mean()
-    df["SMA_20"] = df["Close"].rolling(window=20).mean()
-    
-    # RSI (買われすぎ・売られすぎセンサー)
+    # RSI
     delta = df["Close"].diff()
-    gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
-    loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
+    gain = (delta.where(delta > 0, 0)).rolling(14).mean()
+    loss = (-delta.where(delta < 0, 0)).rolling(14).mean()
     rs = gain / loss
     df["RSI"] = 100 - (100 / (1 + rs))
-    
-    # MACD (トレンド転換センサー)
-    exp12 = df["Close"].ewm(span=12, adjust=False).mean()
-    exp26 = df["Close"].ewm(span=26, adjust=False).mean()
+    # MACD
+    exp12 = df["Close"].ewm(span=12).mean()
+    exp26 = df["Close"].ewm(span=26).mean()
     df["MACD"] = exp12 - exp26
-    df["Signal"] = df["MACD"].ewm(span=9, adjust=False).mean()
-    
-    # ボリンジャーバンド (異常値センサー)
-    sma20 = df["Close"].rolling(window=20).mean()
-    std20 = df["Close"].rolling(window=20).std()
-    df["Upper_Band"] = sma20 + (std20 * 2)
-    df["Lower_Band"] = sma20 - (std20 * 2)
-    
-    # 特徴量: 終値が各指標とどうなっているか
-    df["RSI_Val"] = df["RSI"]
-    df["MACD_Diff"] = df["MACD"] - df["Signal"] # プラスなら上昇トレンド
-    df["Dist_Upper"] = (df["Upper_Band"] - df["Close"]) / df["Close"] # バンドまでの距離
-    
+    df["Signal"] = df["MACD"].ewm(span=9).mean()
     return df
 
-# --- 3. 市場全体の分析 ---
-def analyze_market_context():
+# --- 3. 市場全体の分析 (S&P500) ---
+def analyze_market():
     df = get_data("SPY")
     if df.empty: return "Unknown", "⚪"
-    
-    df = add_technical_indicators(df)
-    latest = df.iloc[-1]
-    
-    # RSIで過熱感を判定
-    if latest["RSI"] > 70:
-        return "Overbought (Risk High)", "🔥⚠️"
-    elif latest["RSI"] < 30:
-        return "Oversold (Bounce Likely)", "💧🔄"
-    
-    # MACDでトレンド判定
-    if latest["MACD_Diff"] > 0:
-        return "Bull Trend (Positive)", "🐂✅"
-    else:
-        return "Bear Trend (Negative)", "🐻⚠️"
+    df = add_indicators(df)
+    rsi = df["RSI"].iloc[-1]
+    if rsi > 70: return "Overheated (Caution)", "🔥⚠️"
+    if rsi < 30: return "Bargain Zone (Buy)", "💎✅"
+    return "Neutral / Stable", "⚖️"
 
-# --- 4. 個別株の予測 ---
-def predict_stock(ticker, market_status):
+# --- 4. 予測ロジック ---
+def predict_stock(stock_info):
+    ticker = stock_info["ticker"]
     df = get_data(ticker)
     if df.empty or len(df) < 60: return None
 
-    df = add_technical_indicators(df)
+    df = add_indicators(df)
     
-    # 5日後予測（1%以上上がるか？）
-    prediction_days = 5
-    future_return = (df["Close"].shift(-prediction_days) - df["Close"]) / df["Close"]
+    # 5日後予測
+    future_return = (df["Close"].shift(-5) - df["Close"]) / df["Close"]
     df["Target"] = (future_return > 0.01).astype(int)
-    
     df.dropna(inplace=True)
 
-    # 学習に使う特徴量を増やす
-    features = ["RSI_Val", "MACD_Diff", "Dist_Upper"]
-    X = df[features]
-    y = df["Target"]
+    # 学習
+    model = RandomForestClassifier(n_estimators=100, max_depth=5, random_state=42)
+    model.fit(df[["RSI", "MACD"]].iloc[:-5], df["Target"].iloc[:-5])
     
-    X_train = X.iloc[:-5]
-    y_train = y.iloc[:-5]
-    X_latest = X.iloc[-1:]
-
-    # 市場状況に合わせてAIの判断基準を変える
-    model = RandomForestClassifier(n_estimators=200, max_depth=5, random_state=42)
-    model.fit(X_train, y_train)
+    # 予測
+    score = model.predict_proba(df[["RSI", "MACD"]].iloc[-1:])[0][1] * 100
     
-    prob = model.predict_proba(X_latest)[0]
-    score = prob[1] * 100 # 上昇確率
+    if score >= 60: grade = "S 🚀"
+    elif score >= 50: grade = "A ↗️"
+    elif score >= 40: grade = "B ➡️"
+    else: grade = "C ↘️"
     
-    # 判定ロジックを微調整（40-60%は迷い中とする）
-    if score >= 60:
-        trend = "STRONG UP 🚀"
-    elif score >= 50:
-        trend = "WEAK UP ↗️"
-    elif score >= 40:
-        trend = "NEUTRAL ➡️"
-    else:
-        trend = "DOWN ↘️"
-        
     return {
-        "ticker": ticker,
+        "name": stock_info["name"],
         "price": df["Close"].iloc[-1],
-        "trend": trend,
+        "currency": stock_info["currency"],
+        "grade": grade,
         "score": score,
-        "rsi": df["RSI_Val"].iloc[-1] # RSIも表示してあげる
+        "rsi": df["RSI"].iloc[-1]
     }
 
-# --- 5. レポート作成 ---
-def update_readme(market_info, results):
-    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    status_text, status_icon = market_info
+# --- 5. レポート作成（2つの表を作成） ---
+def update_readme(market_status, res_us, res_jp):
+    now = datetime.now().strftime("%Y-%m-%d %H:%M (UTC)")
     
-    rows = ""
-    for res in results:
-        # RSIも表示に追加
-        rows += f"| {res['ticker']} | ${res['price']:.2f} | **{res['trend']}** | {res['score']:.1f}% | {res['rsi']:.1f} |\n"
+    # スコア順に並べ替え
+    res_us.sort(key=lambda x: x["score"], reverse=True)
+    res_jp.sort(key=lambda x: x["score"], reverse=True)
+    
+    def make_table(results):
+        rows = ""
+        for r in results:
+            rows += f"| {r['name']} | {r['currency']}{r['price']:,.0f} | **{r['grade']}** | {r['score']:.1f}% | {r['rsi']:.1f} |\n"
+        return rows
 
-    content = f"""# 🧠 AI Investment Strategy Report (Technical Ver.)
+    content = f"""# 🧠 AI Strategy Report (Dual Region)
     
-## 🌍 Market Context
-**Status:** {status_icon} **{status_text}**
-(Analyzed via RSI & MACD of S&P 500)
+## 🌍 Global Market Context
+**Status:** {market_status[1]} **{market_status[0]}**
 
 ---
 
-## 🎯 Individual Stock Predictions (5-Day Horizon)
-*Updated: {now} (UTC)*
-
-| Ticker | Price | Prediction | Probability (Up) | RSI (Heat) |
+## 🇺🇸 US & Global Growth Stocks
+| Stock | Price | Rating | Conf. | RSI |
 | :--- | :--- | :--- | :--- | :--- |
-{rows}
+{make_table(res_us)}
 
-- **RSI > 70:** Overbought (High risk of drop)
-- **RSI < 30:** Oversold (Chance of bounce)
-- **Probability:** >60% is a strong signal.
+## 🇯🇵 Japan Leading Stocks
+| Stock | Price | Rating | Conf. | RSI |
+| :--- | :--- | :--- | :--- | :--- |
+{make_table(res_jp)}
 
 ---
-*Powered by GitHub Actions*
+*Updated: {now}*
 """
     with open("README.md", "w", encoding="utf-8") as f:
         f.write(content)
 
 def main():
-    print("--- Analyzing Market ---")
-    market_status = analyze_market_context()
+    print("--- Market Check ---")
+    status = analyze_market()
     
-    results = []
-    print("--- Predicting Stocks ---")
-    for ticker in TICKERS:
-        try:
-            res = predict_stock(ticker, market_status)
-            if res: results.append(res)
-        except Exception as e:
-            print(f"Skip {ticker}: {e}")
+    res_us = []
+    print("--- Predicting US Stocks ---")
+    for s in STOCKS_US:
+        r = predict_stock(s)
+        if r: res_us.append(r)
+        
+    res_jp = []
+    print("--- Predicting Japan Stocks ---")
+    for s in STOCKS_JP:
+        r = predict_stock(s)
+        if r: res_jp.append(r)
             
-    update_readme(market_status, results)
+    update_readme(status, res_us, res_jp)
     print("Done!")
 
 if __name__ == "__main__":
