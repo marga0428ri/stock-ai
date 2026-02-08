@@ -1,15 +1,16 @@
-import yfinance as yf
 
-def fetch(stock_code="AAPL"):
-    df = yf.download(
-        stock_code,
-        start="2015-01-01",
-        interval="1d",
-        auto_adjust=True
-    )
+import yfinance as yf
+import pandas as pd
+
+def get_data(ticker="AAPL", start="2015-01-01"):
+    # データを取得
+    df = yf.download(ticker, start=start, progress=False)
+    
+    # 【エラー対策】データの表形式が複雑な場合、シンプルに直す
+    if isinstance(df.columns, pd.MultiIndex):
+        df.columns = df.columns.get_level_values(0)
+        
     return df
 
 if __name__ == "__main__":
-    data = fetch("AAPL")
-    data.to_csv("AAPL_daily.csv")
-    print("Saved AAPL_daily.csv")
+    get_data()
