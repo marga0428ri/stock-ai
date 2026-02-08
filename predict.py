@@ -4,11 +4,9 @@ from datetime import datetime
 from sklearn.ensemble import RandomForestClassifier
 import numpy as np
 
-# --- 🎯 設定：調べたい株のリスト ---
-# ここを好きな銘柄に変えれば、何でも分析できます
 TICKERS = ["AAPL", "NVDA", "MSFT", "TSLA", "GOOGL", "AMZN"]
 
-# --- 1. データ取得（全体・個別） ---
+# --- 1. データ取得 ---
 def get_data(ticker, start="2010-01-01"):
     try:
         df = yf.download(ticker, start=start, progress=False)
@@ -19,42 +17,66 @@ def get_data(ticker, start="2010-01-01"):
         print(f"Error fetching {ticker}: {e}")
         return pd.DataFrame()
 
-# --- 2. 世界・文脈AI（上位レイヤー） ---
-def analyze_market_context():
-    """
-    S&P500 (SPY) を分析して、今の市場が「安全」か「危険」かを判定する
-    """
-    df = get_data("SPY") # S&P500 ETF
-    if df.empty: return "Unknown", "⚪"
-
-    # 200日移動平均線（長期トレンドの王様）
-    df["SMA_200"] = df["Close"].rolling(window=200).mean()
-    latest = df.iloc[-1]
+# --- 2. テクニカル指標の計算（ここが強化ポイント！） ---
+def add_technical_indicators(df):
+    df = df.copy()
     
-    # 短期的なショック判定（ボラティリティ）
-    volatility = df["Close"].pct_change().rolling(window=20).std().iloc[-1]
-    
-    # 判定ロジック
-    if latest["Close"] < latest["SMA_200"]:
-        # 長期下落トレンド（リーマンショックやコロナ初期のような状態）
-        return "Bear Market (Danger)", "🐻⚠️"
-    elif volatility > 0.02:
-        # トレンドは上だが、値動きが激しすぎる（不安定）
-        return "Volatile (Caution)", "🌊⚠️"
-    else:
-        # 安定上昇
-        return "Bull Market (Safe)", "🐂✅"
-
-# --- 3. 個別株AI（下位レイヤー） ---
-def predict_stock(ticker, market_status):
-    df = get_data(ticker)
-    if df.empty: return None
-
-    # 特徴量エンジニアリング
-    df["Return"] = df["Close"].pct_change()
+    # 移動平均線
     df["SMA_5"] = df["Close"].rolling(window=5).mean()
     df["SMA_20"] = df["Close"].rolling(window=20).mean()
-    df["Volatility"] = df["Close"].pct_change().rolling(window=5).std()
+    
+    # RSI (買われすぎ・売られすぎセンサー)
+    delta = df["Close"].diff()
+    gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
+    loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
+    rs = gain / loss
+    df["RSI"] = 100 - (100 / (1 + rs))
+    
+    # MACD (トレンド転換センサー)
+    exp12 = df["Close"].ewm(span=12, adjust=False).mean()
+    exp26 = df["Close"].ewm(span=26, adjust=False).mean()
+    df["MACD"] = exp12 - exp26
+    df["Signal"] = df["MACD"].ewm(span=9, adjust=False).mean()
+    
+    # ボリンジャーバンド (異常値センサー)
+    sma20 = df["Close"].rolling(window=20).mean()
+    std20 = df["Close"].rolling(window=20).std()
+    df["Upper_Band"] = sma20 + (std20 * 2)
+    df["Lower_Band"] = sma20 - (std20 * 2)
+    
+    # 特徴量: 終値が各指標とどうなっているか
+    df["RSI_Val"] = df["RSI"]
+    df["MACD_Diff"] = df["MACD"] - df["Signal"] # プラスなら上昇トレンド
+    df["Dist_Upper"] = (df["Upper_Band"] - df["Close"]) / df["Close"] # バンドまでの距離
+    
+    return df
+
+# --- 3. 市場全体の分析 ---
+def analyze_market_context():
+    df = get_data("SPY")
+    if df.empty: return "Unknown", "⚪"
+    
+    df = add_technical_indicators(df)
+    latest = df.iloc[-1]
+    
+    # RSIで過熱感を判定
+    if latest["RSI"] > 70:
+        return "Overbought (Risk High)", "🔥⚠️"
+    elif latest["RSI"] < 30:
+        return "Oversold (Bounce Likely)", "💧🔄"
+    
+    # MACDでトレンド判定
+    if latest["MACD_Diff"] > 0:
+        return "Bull Trend (Positive)", "🐂✅"
+    else:
+        return "Bear Trend (Negative)", "🐻⚠️"
+
+# --- 4. 個別株の予測 ---
+def predict_stock(ticker, market_status):
+    df = get_data(ticker)
+    if df.empty or len(df) < 60: return None
+
+    df = add_technical_indicators(df)
     
     # 5日後予測（1%以上上がるか？）
     prediction_days = 5
@@ -63,8 +85,8 @@ def predict_stock(ticker, market_status):
     
     df.dropna(inplace=True)
 
-    # 学習データ作成
-    features = ["Return", "Volatility"]
+    # 学習に使う特徴量を増やす
+    features = ["RSI_Val", "MACD_Diff", "Dist_Upper"]
     X = df[features]
     y = df["Target"]
     
@@ -72,74 +94,80 @@ def predict_stock(ticker, market_status):
     y_train = y.iloc[:-5]
     X_latest = X.iloc[-1:]
 
-    # 市場が悪ければ、AIを慎重にする（木の深さを浅くする等）
-    depth = 3 if "Danger" in market_status else 5
-    
-    model = RandomForestClassifier(n_estimators=100, max_depth=depth, random_state=42)
+    # 市場状況に合わせてAIの判断基準を変える
+    model = RandomForestClassifier(n_estimators=200, max_depth=5, random_state=42)
     model.fit(X_train, y_train)
     
-    prediction = model.predict(X_latest)[0]
     prob = model.predict_proba(X_latest)[0]
-    
-    # 結果整形
     score = prob[1] * 100 # 上昇確率
-    trend = "UP 🚀" if prediction == 1 else "DOWN 📉"
     
+    # 判定ロジックを微調整（40-60%は迷い中とする）
+    if score >= 60:
+        trend = "STRONG UP 🚀"
+    elif score >= 50:
+        trend = "WEAK UP ↗️"
+    elif score >= 40:
+        trend = "NEUTRAL ➡️"
+    else:
+        trend = "DOWN ↘️"
+        
     return {
         "ticker": ticker,
         "price": df["Close"].iloc[-1],
         "trend": trend,
-        "score": score
+        "score": score,
+        "rsi": df["RSI_Val"].iloc[-1] # RSIも表示してあげる
     }
 
-# --- 4. レポート作成機能 ---
+# --- 5. レポート作成 ---
 def update_readme(market_info, results):
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     status_text, status_icon = market_info
     
-    # テーブルの行を作成
     rows = ""
     for res in results:
-        rows += f"| {res['ticker']} | ${res['price']:.2f} | **{res['trend']}** | {res['score']:.1f}% |\n"
+        # RSIも表示に追加
+        rows += f"| {res['ticker']} | ${res['price']:.2f} | **{res['trend']}** | {res['score']:.1f}% | {res['rsi']:.1f} |\n"
 
-    content = f"""# 🧠 AI Investment Strategy Report
+    content = f"""# 🧠 AI Investment Strategy Report (Technical Ver.)
     
-## 🌍 Market Context (World AI)
+## 🌍 Market Context
 **Status:** {status_icon} **{status_text}**
-- The AI analyzes the S&P 500 trend to determine global risk.
-- If "Danger", individual predictions become more conservative.
+(Analyzed via RSI & MACD of S&P 500)
 
 ---
 
 ## 🎯 Individual Stock Predictions (5-Day Horizon)
 *Updated: {now} (UTC)*
 
-| Ticker | Price | Prediction | Confidence |
-| :--- | :--- | :--- | :--- |
+| Ticker | Price | Prediction | Probability (Up) | RSI (Heat) |
+| :--- | :--- | :--- | :--- | :--- |
 {rows}
 
+- **RSI > 70:** Overbought (High risk of drop)
+- **RSI < 30:** Oversold (Chance of bounce)
+- **Probability:** >60% is a strong signal.
+
 ---
-*Powered by GitHub Actions & Python*
+*Powered by GitHub Actions*
 """
     with open("README.md", "w", encoding="utf-8") as f:
         f.write(content)
 
-# --- メイン処理 ---
 def main():
-    print("--- 1. Analyzing World Context ---")
-    market_status, market_icon = analyze_market_context()
-    print(f"Market Status: {market_status}")
-
-    results = []
-    print("--- 2. Predicting Individual Stocks ---")
-    for ticker in TICKERS:
-        print(f"Processing {ticker}...")
-        res = predict_stock(ticker, market_status)
-        if res:
-            results.append(res)
+    print("--- Analyzing Market ---")
+    market_status = analyze_market_context()
     
-    print("--- 3. Updating Report ---")
-    update_readme((market_status, market_icon), results)
+    results = []
+    print("--- Predicting Stocks ---")
+    for ticker in TICKERS:
+        try:
+            res = predict_stock(ticker, market_status)
+            if res: results.append(res)
+        except Exception as e:
+            print(f"Skip {ticker}: {e}")
+            
+    update_readme(market_status, results)
     print("Done!")
 
 if __name__ == "__main__":
