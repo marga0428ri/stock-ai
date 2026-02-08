@@ -1,38 +1,39 @@
-# 🧠 AI Strategy Report (News Integrated)
+# 🧠 AI Strategy Report (History-Adjusted)
     
-## 🌍 Global Market Context
-**Status:** ⚖️ **Neutral**
+## ⚖️ How "Event Points" work now?
+The AI doesn't just read news. It checks **History**.
+It calculates a **Sensitivity Factor (x1.0)** for each stock.
+
+* **Equation:** `News Keywords` × `Sensitivity Factor` = **True Impact**
+* **Sensitivity > 1.0:** This stock tends to **overreact** to news (High Risk).
+* **Sensitivity < 1.0:** This stock is **resilient** (Low Risk).
+* **Event Pts:** The final calculated impact of today's news.
 
 ---
 
-## 🇺🇸 US & Global Growth Stocks
-| Stock | Price | Rating | Conf. | RSI | News |
+## 🇺🇸 US & Global Stocks
+| Stock | Price | Rating | Total | Event Pts | Sensitivity |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| Microsoft | $401 | **S 🚀** | 67.4% | 31.0 | ⚪ |
-| Google | $323 | **A ↗️** | 56.2% | 43.7 | ☀️ |
-| Apple | $278 | **A ↗️** | 53.8% | 74.2 | ☀️ |
-| NVIDIA | $185 | **A ↗️** | 50.8% | 49.3 | ☀️ |
-| Tesla | $411 | **B ➡️** | 46.5% | 40.8 | ☀️ |
-| Amazon | $210 | **B ➡️** | 45.4% | 27.8 | ☀️ |
-| Eli Lilly | $1,058 | **B ➡️** | 43.5% | 52.5 | ☀️ |
+| Amazon | $210 | **S 🚀** | 62 | 7.3 ☀️ | x0.94 |
+| Google | $323 | **S 🚀** | 61 | 11.0 ☀️ | x0.89 |
+| Tesla | $411 | **A ↗️** | 60 | 10.0 ☀️ | x1.00 |
+| Apple | $278 | **A ↗️** | 55 | 9.6 ☀️ | x0.87 |
+| Microsoft | $401 | **B ➡️** | 49 | -1.0 ⚪ | x0.84 |
+| Eli Lilly | $1,058 | **C ↘️** | 45 | -5.0 ☁️ | x0.91 |
+| NVIDIA | $185 | **D 💀** | 31 | -18.6 ⚡ | x0.95 |
 
 
-## 🇯🇵 Japan Leading Stocks
-| Stock | Price | Rating | Conf. | RSI | News |
+## 🇯🇵 Japan Stocks
+| Stock | Price | Rating | Total | Event Pts | Sensitivity |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| Tokyo Electron | ¥41,030 | **A ↗️** | 54.9% | 46.2 | ☀️ |
-| Fast Retailing | ¥63,500 | **C ↘️** | 38.7% | 55.1 | ⚪ |
-| Keyence | ¥53,260 | **C ↘️** | 38.7% | 18.0 | ☁️ |
-| SoftBank G | ¥3,999 | **C ↘️** | 36.7% | 50.4 | ⚪ |
-| Sony Group | ¥3,507 | **C ↘️** | 35.2% | 34.6 | ⚪ |
-| Toyota | ¥3,780 | **C ↘️** | 30.8% | 58.6 | ☀️ |
-| Nintendo | ¥8,441 | **C ↘️** | 29.1% | 20.9 | ⚪ |
+| Nintendo | ¥8,441 | **S 🚀** | 67 | 11.6 ☀️ | x1.05 |
+| Sony Group | ¥3,507 | **S 🚀** | 66 | 15.7 🔥 | x0.95 |
+| SoftBank G | ¥3,999 | **S 🚀** | 60 | 10.1 ☀️ | x0.98 |
+| Toyota | ¥3,780 | **A ↗️** | 60 | 9.9 ☀️ | x0.94 |
+| Tokyo Electron | ¥41,030 | **A ↗️** | 58 | 7.9 ☀️ | x0.99 |
+| Keyence | ¥53,260 | **A ↗️** | 54 | -1.4 ⚪ | x0.90 |
+| Fast Retailing | ¥63,500 | **D 💀** | 39 | -11.0 ☁️ | x0.98 |
 
-
-### 💡 Legend
-- **News:** ☀️=Good, ☁️=Bad, ⚪=Neutral
-- **Conf:** Tech Score ± News Sentiment
-- **Schedule:** Updates every 6 hours
 
 ---
-*Updated: 2026-02-08 02:34 (UTC)*
+*Updated: 2026-02-08 02:47 (UTC)*
