@@ -5,189 +5,240 @@ from sklearn.ensemble import RandomForestClassifier
 import feedparser
 from textblob import TextBlob
 import numpy as np
+import time
 
-# --- 🎯 銘柄リスト ---
-STOCKS_US = [
-    {"ticker": "NVDA", "name": "NVIDIA", "currency": "$", "query": "NVIDIA stock"},
-    {"ticker": "AAPL", "name": "Apple", "currency": "$", "query": "Apple stock"},
-    {"ticker": "MSFT", "name": "Microsoft", "currency": "$", "query": "Microsoft stock"},
-    {"ticker": "TSLA", "name": "Tesla", "currency": "$", "query": "Tesla stock"},
-    {"ticker": "AMZN", "name": "Amazon", "currency": "$", "query": "Amazon stock"},
-    {"ticker": "GOOGL", "name": "Google", "currency": "$", "query": "Google stock"},
-    {"ticker": "LLY", "name": "Eli Lilly", "currency": "$", "query": "Eli Lilly stock"}
+# --- 🎯 監視対象と「3つの視点」 ---
+# 情報収集を倍増させるため、各銘柄に複数の検索クエリを設定
+STOCKS = [
+    # 🇺🇸 米国株
+    {
+        "ticker": "NVDA", "name": "NVIDIA", "currency": "$",
+        "queries": ["NVIDIA stock news", "NVIDIA earnings analysis", "AI chip market demand"]
+    },
+    {
+        "ticker": "AAPL", "name": "Apple", "currency": "$",
+        "queries": ["Apple stock news", "iPhone sales report", "tech sector trends"]
+    },
+    {
+        "ticker": "MSFT", "name": "Microsoft", "currency": "$",
+        "queries": ["Microsoft stock news", "Azure cloud growth", "software industry news"]
+    },
+    {
+        "ticker": "TSLA", "name": "Tesla", "currency": "$",
+        "queries": ["Tesla stock news", "EV market outlook", "Elon Musk news"]
+    },
+    {
+        "ticker": "AMZN", "name": "Amazon", "currency": "$",
+        "queries": ["Amazon stock news", "AWS revenue", "e-commerce trends"]
+    },
+    
+    # 🇯🇵 日本株
+    {
+        "ticker": "7203.T", "name": "Toyota", "currency": "¥",
+        "queries": ["Toyota Motor stock", "Toyota financial results", "auto industry Japan"]
+    },
+    {
+        "ticker": "6758.T", "name": "Sony Group", "currency": "¥",
+        "queries": ["Sony Group stock", "PlayStation sales", "image sensor market"]
+    },
+    {
+        "ticker": "7974.T", "name": "Nintendo", "currency": "¥",
+        "queries": ["Nintendo stock", "Switch console sales", "video game market"]
+    },
+    {
+        "ticker": "8035.T", "name": "Tokyo Electron", "currency": "¥",
+        "queries": ["Tokyo Electron stock", "semiconductor equipment market", "chip industry news"]
+    },
+    {
+        "ticker": "9983.T", "name": "Fast Retailing", "currency": "¥",
+        "queries": ["Fast Retailing stock", "Uniqlo sales", "retail apparel trends"]
+    }
 ]
 
-STOCKS_JP = [
-    {"ticker": "7203.T", "name": "Toyota", "currency": "¥", "query": "Toyota stock"},
-    {"ticker": "6758.T", "name": "Sony Group", "currency": "¥", "query": "Sony Group stock"},
-    {"ticker": "7974.T", "name": "Nintendo", "currency": "¥", "query": "Nintendo stock"},
-    {"ticker": "9984.T", "name": "SoftBank G", "currency": "¥", "query": "SoftBank Group stock"},
-    {"ticker": "8035.T", "name": "Tokyo Electron", "currency": "¥", "query": "Tokyo Electron stock"},
-    {"ticker": "6861.T", "name": "Keyence", "currency": "¥", "query": "Keyence stock"},
-    {"ticker": "9983.T", "name": "Fast Retailing", "currency": "¥", "query": "Fast Retailing stock"}
-]
-
-# --- 1. ニュース（現在の事件）の仮採点 ---
-KEYWORDS_SCORE = {
-    # 影響度が大きい単語のみに絞り、点数を控えめにする（補正前）
-    "record": 5, "beat": 3, "surge": 3, "partnership": 3, "acquisition": 3,
-    "lawsuit": -5, "miss": -3, "plunge": -3, "scandal": -5, "regulatory": -3
+# --- 1. Deep News Analysis (情報収集の倍増) ---
+KEYWORDS_WEIGHT = {
+    "record": 2.0, "surge": 1.5, "jump": 1.5, "beat": 1.5, "approval": 2.0,
+    "buyback": 1.2, "dividend": 1.2, "acquisition": 1.5, "partnership": 1.2,
+    "plunge": -1.5, "miss": -1.5, "drop": -1.2, "fail": -1.5, "lawsuit": -2.0,
+    "scandal": -2.5, "cut": -1.2, "downgrade": -1.5, "inflation": -1.0
 }
 
-def get_base_news_score(query):
-    safe_query = query.replace(" ", "+")
-    rss_url = f"https://news.google.com/rss/search?q={safe_query}+when:1d&hl=en-US&gl=US&ceid=US:en"
-    total = 0
-    try:
-        feed = feedparser.parse(rss_url)
-        for entry in feed.entries[:5]:
-            title = entry.title.lower()
-            # 単語マッチング
-            for word, score in KEYWORDS_SCORE.items():
-                if word in title: total += score
-            # 感情分析（補助）
-            blob = TextBlob(title)
-            total += blob.sentiment.polarity * 2
-    except: pass
-    return total # これが「補正前」の点数
+def analyze_deep_news(queries):
+    """
+    複数のクエリを使ってニュースを深掘りし、
+    総合的な「センチメントスコア (-1.0 ~ 1.0)」を算出する
+    """
+    total_score = 0
+    article_count = 0
+    seen_titles = set() # 重複記事を排除
 
-# --- 2. データ取得 ---
-def get_data(ticker, start="2012-01-01"):
+    for query in queries:
+        safe_query = query.replace(" ", "+")
+        rss_url = f"https://news.google.com/rss/search?q={safe_query}+when:1d&hl=en-US&gl=US&ceid=US:en"
+        
+        try:
+            feed = feedparser.parse(rss_url)
+            # 各クエリから上位5件を取得（合計最大15件）
+            for entry in feed.entries[:5]:
+                title = entry.title
+                if title in seen_titles: continue
+                seen_titles.add(title)
+
+                # A. 感情分析
+                blob = TextBlob(title)
+                polarity = blob.sentiment.polarity
+                
+                # B. キーワード重み付け
+                weight = 1.0
+                title_lower = title.lower()
+                for word, w_val in KEYWORDS_WEIGHT.items():
+                    if word in title_lower:
+                        weight = w_val # 強い言葉があれば重みを上書き
+                        break # 最も強い言葉を優先
+                
+                # 重み付きスコアを加算
+                total_score += polarity * abs(weight) * (1 if weight > 0 else -1)
+                article_count += 1
+                
+        except Exception:
+            continue
+            
+    if article_count == 0: return 0.0, 0
+    
+    # 平均スコアを算出 (-1.0 〜 1.0 に正規化)
+    avg_score = total_score / article_count
+    # 少し値を強調する（ニュースの影響を反映しやすくするため）
+    final_sentiment = max(-1.0, min(1.0, avg_score * 1.5))
+    
+    return final_sentiment, article_count
+
+# --- 2. 過去データとボラティリティの取得 ---
+def get_market_data(ticker):
     try:
-        df = yf.download(ticker, start=start, progress=False)
+        # 過去1年分のデータ
+        df = yf.download(ticker, period="1y", progress=False)
         if isinstance(df.columns, pd.MultiIndex):
             df.columns = df.columns.get_level_values(0)
         return df
     except: return pd.DataFrame()
 
-# --- 3. ★歴史的感応度（Impact Factor）の計算 ---
-def calculate_historical_sensitivity(df):
+# --- 3. 利益予想ロジック (Expected Return Calculation) ---
+def calculate_expected_profit(df, sentiment_score):
     """
-    【因果関係の学習】
-    過去に「大きな動き（事件）」があった時、その後の株価はどう反応したか？
+    【ここが核心】
+    その株が持つ「変動エネルギー(Volatility)」に「ニュースの勢い」を掛け合わせ、
+    明日の具体的な予想利益(%)を計算する。
     """
-    df = df.copy()
+    # 1. その株の「1日の平均変動幅」を計算（ボラティリティ）
+    # 最近の動きを重視するため、直近20日の標準偏差を使う
+    daily_volatility = df["Close"].pct_change().rolling(20).std().iloc[-1]
     
-    # 1. 過去の「事件日」を定義（3%以上動いた日）
-    df["Daily_Return"] = df["Close"].pct_change()
-    df["Is_Shock"] = df["Daily_Return"].abs() > 0.03 
-    
-    # 2. その事件の「5日後の結果」を見る
-    df["Next_5d_Return"] = df["Close"].shift(-5).pct_change(periods=5)
-    
-    # 3. 衝撃（原因）と結果（価格）の相関を調べる
-    # Shock_Sensitivity: 事件があった方向にさらに伸びるか、逆に行くか
-    # 正の値 = 順張り（ニュースに従いやすい）
-    # 負の値 = 逆張り（ニュースを無視して戻しやすい）
-    shock_data = df[df["Is_Shock"] == True]
-    
-    if len(shock_data) < 10:
-        return 1.0 # データ不足なら標準（1.0倍）
-        
-    sensitivity = shock_data["Daily_Return"].corr(shock_data["Next_5d_Return"])
-    
-    # 係数がNaNになる場合（動きがない場合）の対策
-    if np.isnan(sensitivity): sensitivity = 0.5
+    # データが取れない場合の安全策
+    if np.isnan(daily_volatility): daily_volatility = 0.015 # 1.5%と仮定
 
-    # 係数を使いやすい形に正規化 (0.5倍 〜 2.0倍の範囲に収める)
-    # これにより「過剰な点数」を防ぐ
-    impact_factor = 1.0 + sensitivity
-    impact_factor = max(0.5, min(2.0, impact_factor))
+    # 2. ベースのトレンド（最近上がってるか下がってるか）
+    # 5日移動平均と20日移動平均の乖離率
+    sma5 = df["Close"].rolling(5).mean().iloc[-1]
+    sma20 = df["Close"].rolling(20).mean().iloc[-1]
+    trend_strength = (sma5 - sma20) / sma20
     
-    return impact_factor
+    # 3. 予想変動率の計算式
+    # 予想% = (トレンド由来の変動) + (ニュース由来の衝撃)
+    # ニュースがない(0)なら、トレンドに従う。ニュースが強ければ、それを大きく反映。
+    
+    # ニュースの影響力をボラティリティの何倍にするか（感応度係数）
+    impact_factor = 2.0 
+    
+    expected_change_pct = (trend_strength * 0.3) + (sentiment_score * daily_volatility * impact_factor)
+    
+    # 現実的な範囲に収める（1日で±15%以上動く予想は異常値としてカット）
+    expected_change_pct = max(-0.15, min(0.15, expected_change_pct))
+    
+    return expected_change_pct * 100 # %表記にする
 
-# --- 4. 予測ロジック（因果関係の統合） ---
-def predict_stock(stock_info):
+# --- 4. 総合分析実行 ---
+def analyze_stock(stock_info):
     ticker = stock_info["ticker"]
-    df = get_data(ticker)
-    if df.empty or len(df) < 300: return None
-
-    # A. 過去の傾向（感応度）を学習
-    impact_factor = calculate_historical_sensitivity(df)
     
-    # B. 現在のニュース点数を取得
-    base_news_score = get_base_news_score(stock_info["query"])
+    # A. データをじっくり取得
+    df = get_market_data(ticker)
+    if df.empty or len(df) < 20: return None
     
-    # C. 点数の補正（ここが重要！）
-    # 「ただの+5点」ではなく、「この株は事件に敏感だから +5 * 1.5 = +7.5点」とする
-    adjusted_event_points = base_news_score * impact_factor * 5 # 5はスケール調整
+    # B. ニュースを深く読む（3倍の情報量）
+    sentiment, art_count = analyze_deep_news(stock_info["queries"])
     
-    # 上限下限クリップ（暴走防止）
-    adjusted_event_points = max(-30, min(30, adjusted_event_points))
-
-    # D. テクニカル分析（トレンド確認）
-    df["RSI"] = 100 - (100 / (1 + df["Close"].diff().where(df["Close"].diff() > 0, 0).rolling(14).mean() / (-df["Close"].diff().where(df["Close"].diff() < 0, 0).rolling(14).mean())))
-    last_rsi = df["RSI"].iloc[-1]
+    # C. 利益予想を計算
+    exp_profit = calculate_expected_profit(df, sentiment)
     
-    # E. 最終スコア算出
-    # 基準点50 + 事件点(補正済み) + テクニカル微調整
-    tech_bias = 0
-    if last_rsi > 70: tech_bias = -5 # 買われすぎなら少し引く
-    elif last_rsi < 30: tech_bias = 5 # 売られすぎなら少し足す
+    # D. アクション判定
+    # 予想利益がプラスならBUY、マイナスならSELL、微小ならWAIT
+    action = "WAIT ⚪"
+    if exp_profit > 1.0: action = "BUY 🔵" # 1%以上の利益が見込めるならGO
+    if exp_profit > 3.0: action = "STRONG BUY 🚀" # 3%以上なら激熱
+    if exp_profit < -1.0: action = "SELL 🔴"
+    if exp_profit < -3.0: action = "STRONG SELL ⚡"
     
-    final_score = 50 + adjusted_event_points + tech_bias
-    final_score = max(0, min(100, final_score))
-    
-    # 評価
-    if final_score >= 60: grade = "S 🚀"
-    elif final_score >= 53: grade = "A ↗️"
-    elif final_score >= 47: grade = "B ➡️"
-    elif final_score >= 40: grade = "C ↘️"
-    else: grade = "D 💀"
-
-    # ニュースアイコン
-    news_icon = "⚪"
-    if adjusted_event_points > 5: news_icon = "☀️"
-    if adjusted_event_points < -5: news_icon = "☁️"
-    if adjusted_event_points > 15: news_icon = "🔥"
-    if adjusted_event_points < -15: news_icon = "⚡"
-
     return {
         "name": stock_info["name"],
         "price": df["Close"].iloc[-1],
         "currency": stock_info["currency"],
-        "grade": grade,
-        "score": final_score,
-        "event_pts": adjusted_event_points,
-        "sensitivity": impact_factor, # これを表示して傾向を確認
-        "news_icon": news_icon
+        "action": action,
+        "exp_profit": exp_profit, # 予想利益 (%)
+        "sentiment": sentiment,
+        "articles": art_count,
+        "volatility": df["Close"].pct_change().rolling(20).std().iloc[-1] * 100
     }
 
-# --- 5. レポート作成 ---
-def update_readme(res_us, res_jp):
+# --- 5. レポート作成（予想利益欄を追加） ---
+def update_readme(results_us, results_jp):
     now = datetime.now().strftime("%Y-%m-%d %H:%M (UTC)")
-    res_us.sort(key=lambda x: x["score"], reverse=True)
-    res_jp.sort(key=lambda x: x["score"], reverse=True)
+    
+    # 予想利益が高い順に並べ替え（一番儲かりそうな株を上に）
+    results_us.sort(key=lambda x: x["exp_profit"], reverse=True)
+    results_jp.sort(key=lambda x: x["exp_profit"], reverse=True)
     
     def make_table(results):
         rows = ""
         for r in results:
-            # Impact Factor (感応度) も表示
-            rows += f"| {r['name']} | {r['currency']}{r['price']:,.0f} | **{r['grade']}** | {r['score']:.0f} | {r['event_pts']:.1f} {r['news_icon']} | x{r['sensitivity']:.2f} |\n"
+            # 利益予想の表示色づけ
+            prof_str = f"{r['exp_profit']:+.2f}%"
+            if r['exp_profit'] > 0: prof_str = f"**{prof_str}** 📈"
+            elif r['exp_profit'] < 0: prof_str = f"{prof_str} 📉"
+            
+            # センチメントアイコン
+            sent_icon = "⚪"
+            if r['sentiment'] > 0.3: sent_icon = "☀️"
+            if r['sentiment'] < -0.3: sent_icon = "☁️"
+            
+            rows += f"| {r['action']} | {r['name']} | {r['currency']}{r['price']:,.0f} | {prof_str} | {sent_icon} ({r['articles']} news) |\n"
         return rows
 
-    content = f"""# 🧠 AI Strategy Report (History-Adjusted)
+    content = f"""# 🔭 Deep Impact Stock Forecast
     
-## ⚖️ How "Event Points" work now?
-The AI doesn't just read news. It checks **History**.
-It calculates a **Sensitivity Factor (x1.0)** for each stock.
+## 📊 Project Goal
+To calculate the **Exact Expected Profit (%)** for tomorrow by analyzing:
+1.  **Multi-Angle News:** Analyzing company, financial, and sector news.
+2.  **Volatility Energy:** Calculating how much the stock *can* move.
 
-* **Equation:** `News Keywords` × `Sensitivity Factor` = **True Impact**
-* **Sensitivity > 1.0:** This stock tends to **overreact** to news (High Risk).
-* **Sensitivity < 1.0:** This stock is **resilient** (Low Risk).
-* **Event Pts:** The final calculated impact of today's news.
+* **Updates:** 3 times daily (Every 8 hours).
+* **Focus:** Quality of Information > Frequency of Updates.
 
 ---
 
-## 🇺🇸 US & Global Stocks
-| Stock | Price | Rating | Total | Event Pts | Sensitivity |
-| :--- | :--- | :--- | :--- | :--- | :--- |
-{make_table(res_us)}
+## 🇺🇸 US Stocks: Expected Profit
+| Action | Stock | Price | **Exp. Profit (Target)** | News Power |
+| :--- | :--- | :--- | :--- | :--- |
+{make_table(results_us)}
 
-## 🇯🇵 Japan Stocks
-| Stock | Price | Rating | Total | Event Pts | Sensitivity |
-| :--- | :--- | :--- | :--- | :--- | :--- |
-{make_table(res_jp)}
+## 🇯🇵 Japan Stocks: Expected Profit
+| Action | Stock | Price | **Exp. Profit (Target)** | News Power |
+| :--- | :--- | :--- | :--- | :--- |
+{make_table(results_jp)}
+
+### 💡 How to read "Exp. Profit"
+* **+2.5% 📈**: AI predicts the price will rise by 2.5% tomorrow based on news impact.
+* **-1.2% 📉**: Negative news pressure suggests a drop.
+* **Logic**: `Volatility` × `News Sentiment Score` = `Expected Move`
 
 ---
 *Updated: {now}*
@@ -196,10 +247,15 @@ It calculates a **Sensitivity Factor (x1.0)** for each stock.
         f.write(content)
 
 def main():
-    print("--- Predicting US Stocks ---")
-    res_us = [r for s in STOCKS_US if (r := predict_stock(s))]
-    print("--- Predicting Japan Stocks ---")
-    res_jp = [r for s in STOCKS_JP if (r := predict_stock(s))]
+    # 日本株と米国株を分けてリスト化
+    stocks_us = [s for s in STOCKS if s['currency'] == "$"]
+    stocks_jp = [s for s in STOCKS if s['currency'] == "¥"]
+    
+    print("--- Analyzing US Stocks ---")
+    res_us = [r for s in stocks_us if (r := analyze_stock(s))]
+    
+    print("--- Analyzing Japan Stocks ---")
+    res_jp = [r for s in stocks_jp if (r := analyze_stock(s))]
             
     update_readme(res_us, res_jp)
     print("Done!")
