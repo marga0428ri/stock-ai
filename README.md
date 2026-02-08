@@ -1,24 +1,27 @@
-# 🧠 AI Investment Strategy Report
+# 🧠 AI Investment Strategy Report (Technical Ver.)
     
-## 🌍 Market Context (World AI)
-**Status:** 🐂✅ **Bull Market (Safe)**
-- The AI analyzes the S&P 500 trend to determine global risk.
-- If "Danger", individual predictions become more conservative.
+## 🌍 Market Context
+**Status:** 🐻⚠️ **Bear Trend (Negative)**
+(Analyzed via RSI & MACD of S&P 500)
 
 ---
 
 ## 🎯 Individual Stock Predictions (5-Day Horizon)
-*Updated: 2026-02-08 02:05:19 (UTC)*
+*Updated: 2026-02-08 02:12:30 (UTC)*
 
-| Ticker | Price | Prediction | Confidence |
-| :--- | :--- | :--- | :--- |
-| AAPL | $278.12 | **DOWN 📉** | 45.1% |
-| NVDA | $185.41 | **DOWN 📉** | 44.9% |
-| MSFT | $401.14 | **DOWN 📉** | 46.0% |
-| TSLA | $411.11 | **DOWN 📉** | 49.1% |
-| GOOGL | $322.86 | **DOWN 📉** | 45.9% |
-| AMZN | $210.32 | **DOWN 📉** | 45.6% |
+| Ticker | Price | Prediction | Probability (Up) | RSI (Heat) |
+| :--- | :--- | :--- | :--- | :--- |
+| AAPL | $278.12 | **DOWN ↘️** | 30.3% | 74.2 |
+| NVDA | $185.41 | **NEUTRAL ➡️** | 48.0% | 49.3 |
+| MSFT | $401.14 | **WEAK UP ↗️** | 53.1% | 31.0 |
+| TSLA | $411.11 | **DOWN ↘️** | 33.7% | 40.8 |
+| GOOGL | $322.86 | **NEUTRAL ➡️** | 42.7% | 43.7 |
+| AMZN | $210.32 | **NEUTRAL ➡️** | 49.9% | 27.8 |
 
+
+- **RSI > 70:** Overbought (High risk of drop)
+- **RSI < 30:** Oversold (Chance of bounce)
+- **Probability:** >60% is a strong signal.
 
 ---
-*Powered by GitHub Actions & Python*
+*Powered by GitHub Actions*
