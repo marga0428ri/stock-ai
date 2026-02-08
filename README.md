@@ -1,31 +1,44 @@
 # 📊 AI Investment Dashboard
-*Updated: 2026-02-08 04:54 (UTC)*
+*Updated: 2026-02-08 04:59 (UTC)*
 
 ## 💰 My Portfolio (保有資産)
-**Total P/L:** USD **$+2,708.20** / JPY **¥+356,000**
+**Total P/L:** USD **$+0.00** / JPY **¥+0**
 
-| Signal | Stock | P/L (損益) | AI Advice | Data (Exp/RSI) |
-| :---: | :--- | :--- | :--- | :--- |
-| 🔵 **BUY** | **NVIDIA** | 🟢 $+2,708 <br> (+270.8%) | 利益拡大チャンス (Extend) | Exp: **+1.1%** <br> RSI: 49 |
-| ⚪ **WAIT** | **トヨタ** | 🟢 ¥+356,000 <br> (+89.0%) | 様子見 (Watch) | Exp: **+0.6%** <br> RSI: 59 |
-
+No Data.
 
 ---
 
 ## 👀 Watch List (気になる株)
-**Market Opportunities**
-
-データがありません。
+No Data.
 
 ---
-### 💡 Dashboard Guide
-* **Signal:**
-    * 🚀 **STRONG BUY**: 強い買いシグナル (+3%以上予想)
-    * 🔵 **BUY**: 上昇トレンド (+1%以上予想)
-    * ⚪ **WAIT**: 様子見
-    * 🔴 **SELL**: 下落警戒 (-1%以下予想)
-    * ⚡ **STRONG SELL**: 暴落警戒 (-3%以下予想)
+
+## 🌎 World Giants (有名企業)
+| Signal | Stock | Price | Exp. Move | Analysis |
+| :---: | :--- | :--- | :--- | :--- |
+| 🚀 **STRONG BUY** | **Meta** | $661 | **+4.71%** | ☀️ News <br> RSI: 59 |
+| 🔵 **BUY** | **Google** | $323 | **+2.64%** | ☀️ News <br> RSI: 44 <br> ❗ Vol: x1.5 |
+| 🔵 **BUY** | **Amazon** | $210 | **+1.97%** | ⚪ News <br> RSI: 28 <br> ❗ Vol: x3.5 |
+| 🔵 **BUY** | **Eli Lilly** | $1,058 | **+1.60%** | ⚪ News <br> RSI: 52 |
+| 🔴 **SELL** | **Microsoft** | $401 | **-1.53%** | ⚪ News <br> RSI: 31 |
+
+
+---
+
+## 🇯🇵 Japan Giants (有名企業)
+| Signal | Stock | Price | Exp. Move | Analysis |
+| :---: | :--- | :--- | :--- | :--- |
+| 🚀 **STRONG BUY** | **リクルート** | ¥7,062 | **+13.50%** | ☀️ News <br> RSI: 16 <br> ❗ Vol: x2.0 |
+| 🔵 **BUY** | **三菱UFJ** | ¥2,952 | **+2.01%** | ⚪ News <br> RSI: 50 |
+| ⚪ **WAIT** | **ファストリ** | ¥63,500 | **+0.28%** | ⚪ News <br> RSI: 55 |
+| ⚪ **WAIT** | **東エレク** | ¥41,030 | **-0.38%** | ⚪ News <br> RSI: 46 |
+| ⚡ **STRONG SELL** | **キーエンス** | ¥53,260 | **-3.48%** | ☁️ News <br> RSI: 18 |
+
+
+---
+### 💡 Guide
+* **Signal:** 🚀Strong Buy / 🔵Buy / ⚪Wait / 🔴Sell / ⚡Strong Sell
 * **Analysis:**
-    * **News:** ☀️ Good / ☁️ Bad
-    * **RSI:** >70 (Overheated), <30 (Oversold)
-    * **Vol:** ❗ Unusual Volume Detected (Incident)
+    * **Exp:** Expected Move for tomorrow.
+    * **RSI:** >70(High) / <30(Low).
+    * **Vol:** ❗Unusual Volume Detected.
