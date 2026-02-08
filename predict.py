@@ -2,32 +2,55 @@ import pandas as pd
 import yfinance as yf
 from datetime import datetime
 from sklearn.ensemble import RandomForestClassifier
+import feedparser
+from textblob import TextBlob
 import numpy as np
 
-# --- 🎯 銘柄リスト（2つのグループに分離） ---
-# 🇺🇸 米国・世界株
+# --- 🎯 銘柄リスト ---
 STOCKS_US = [
-    {"ticker": "NVDA", "name": "NVIDIA", "currency": "$"},
-    {"ticker": "AAPL", "name": "Apple", "currency": "$"},
-    {"ticker": "MSFT", "name": "Microsoft", "currency": "$"},
-    {"ticker": "TSLA", "name": "Tesla", "currency": "$"},
-    {"ticker": "AMZN", "name": "Amazon", "currency": "$"},
-    {"ticker": "GOOGL", "name": "Google", "currency": "$"},
-    {"ticker": "LLY", "name": "Eli Lilly", "currency": "$"}
+    {"ticker": "NVDA", "name": "NVIDIA", "currency": "$", "query": "NVIDIA stock"},
+    {"ticker": "AAPL", "name": "Apple", "currency": "$", "query": "Apple stock"},
+    {"ticker": "MSFT", "name": "Microsoft", "currency": "$", "query": "Microsoft stock"},
+    {"ticker": "TSLA", "name": "Tesla", "currency": "$", "query": "Tesla stock"},
+    {"ticker": "AMZN", "name": "Amazon", "currency": "$", "query": "Amazon stock"},
+    {"ticker": "GOOGL", "name": "Google", "currency": "$", "query": "Google stock"},
+    {"ticker": "LLY", "name": "Eli Lilly", "currency": "$", "query": "Eli Lilly stock"}
 ]
 
-# 🇯🇵 日本株 (Code + .T)
 STOCKS_JP = [
-    {"ticker": "7203.T", "name": "Toyota", "currency": "¥"},
-    {"ticker": "6758.T", "name": "Sony Group", "currency": "¥"},
-    {"ticker": "7974.T", "name": "Nintendo", "currency": "¥"},
-    {"ticker": "9984.T", "name": "SoftBank G", "currency": "¥"},
-    {"ticker": "8035.T", "name": "Tokyo Electron", "currency": "¥"},
-    {"ticker": "6861.T", "name": "Keyence", "currency": "¥"},
-    {"ticker": "9983.T", "name": "Fast Retailing", "currency": "¥"}
+    {"ticker": "7203.T", "name": "Toyota", "currency": "¥", "query": "Toyota stock"},
+    {"ticker": "6758.T", "name": "Sony Group", "currency": "¥", "query": "Sony Group stock"},
+    {"ticker": "7974.T", "name": "Nintendo", "currency": "¥", "query": "Nintendo stock"},
+    {"ticker": "9984.T", "name": "SoftBank G", "currency": "¥", "query": "SoftBank Group stock"},
+    {"ticker": "8035.T", "name": "Tokyo Electron", "currency": "¥", "query": "Tokyo Electron stock"},
+    {"ticker": "6861.T", "name": "Keyence", "currency": "¥", "query": "Keyence stock"},
+    {"ticker": "9983.T", "name": "Fast Retailing", "currency": "¥", "query": "Fast Retailing stock"}
 ]
 
-# --- 1. データ取得 ---
+# --- 1. ニュース分析機能 (New!) ---
+def get_news_sentiment(query):
+    """
+    Googleニュース(RSS)から最新記事を取得し、
+    ポジティブ(プラス)かネガティブ(マイナス)かを数値化する
+    """
+    # URLエンコードされたRSSフィード (英語ニュースを取得)
+    rss_url = f"https://news.google.com/rss/search?q={query}+when:1d&hl=en-US&gl=US&ceid=US:en"
+    feed = feedparser.parse(rss_url)
+    
+    sentiments = []
+    # 最新5件の記事タイトルを分析
+    for entry in feed.entries[:5]:
+        analysis = TextBlob(entry.title)
+        sentiments.append(analysis.sentiment.polarity)
+    
+    if not sentiments:
+        return 0.0 # ニュースなし
+        
+    # 平均スコア (-1.0 〜 +1.0)
+    avg_score = sum(sentiments) / len(sentiments)
+    return avg_score
+
+# --- 2. データ取得 ---
 def get_data(ticker, start="2015-01-01"):
     try:
         df = yf.download(ticker, start=start, progress=False)
@@ -36,7 +59,7 @@ def get_data(ticker, start="2015-01-01"):
         return df
     except: return pd.DataFrame()
 
-# --- 2. テクニカル分析 ---
+# --- 3. テクニカル分析 ---
 def add_indicators(df):
     df = df.copy()
     # RSI
@@ -52,17 +75,37 @@ def add_indicators(df):
     df["Signal"] = df["MACD"].ewm(span=9).mean()
     return df
 
-# --- 3. 市場全体の分析 (S&P500) ---
+# --- 4. 市場全体の分析 ---
 def analyze_market():
     df = get_data("SPY")
     if df.empty: return "Unknown", "⚪"
     df = add_indicators(df)
     rsi = df["RSI"].iloc[-1]
-    if rsi > 70: return "Overheated (Caution)", "🔥⚠️"
-    if rsi < 30: return "Bargain Zone (Buy)", "💎✅"
-    return "Neutral / Stable", "⚖️"
+    
+    # ニュース分析も加える（市場全体）
+    news_score = get_news_sentiment("Stock Market US")
+    
+    status = "Neutral / Stable"
+    icon = "⚖️"
+    
+    if rsi > 70: 
+        status = "Overheated"
+        icon = "🔥"
+    elif rsi < 30: 
+        status = "Bargain Zone"
+        icon = "💎"
+        
+    # ニュースが極端に悪い場合は警告
+    if news_score < -0.2:
+        status += " (News: Negative ☁️)"
+        icon = "🐻⚠️"
+    elif news_score > 0.2:
+        status += " (News: Positive ☀️)"
+        icon = "🐂✅"
+        
+    return status, icon
 
-# --- 4. 予測ロジック ---
+# --- 5. 予測ロジック (ニュース融合版) ---
 def predict_stock(stock_info):
     ticker = stock_info["ticker"]
     df = get_data(ticker)
@@ -70,62 +113,82 @@ def predict_stock(stock_info):
 
     df = add_indicators(df)
     
-    # 5日後予測
+    # テクニカル指標に基づく予測
     future_return = (df["Close"].shift(-5) - df["Close"]) / df["Close"]
     df["Target"] = (future_return > 0.01).astype(int)
     df.dropna(inplace=True)
 
-    # 学習
     model = RandomForestClassifier(n_estimators=100, max_depth=5, random_state=42)
     model.fit(df[["RSI", "MACD"]].iloc[:-5], df["Target"].iloc[:-5])
     
-    # 予測
-    score = model.predict_proba(df[["RSI", "MACD"]].iloc[-1:])[0][1] * 100
+    # ベースの確率（テクニカル）
+    tech_score = model.predict_proba(df[["RSI", "MACD"]].iloc[-1:])[0][1] * 100
     
-    if score >= 60: grade = "S 🚀"
-    elif score >= 50: grade = "A ↗️"
-    elif score >= 40: grade = "B ➡️"
+    # ★ここでニュース分析を実行！
+    news_score = get_news_sentiment(stock_info["query"])
+    
+    # ニューススコア(-1.0〜1.0)を補正値(-10%〜+10%)に変換
+    news_adjustment = news_score * 10 
+    
+    # 最終スコア（テクニカル + ニュース補正）
+    final_score = tech_score + news_adjustment
+    final_score = max(0, min(100, final_score)) # 0-100の範囲に収める
+    
+    if final_score >= 60: grade = "S 🚀"
+    elif final_score >= 50: grade = "A ↗️"
+    elif final_score >= 40: grade = "B ➡️"
     else: grade = "C ↘️"
+    
+    # ニュースの影響を表示用アイコンにする
+    news_icon = "⚪"
+    if news_score > 0.1: news_icon = "☀️" # 良いニュース多め
+    if news_score < -0.1: news_icon = "☁️" # 悪いニュース多め
     
     return {
         "name": stock_info["name"],
         "price": df["Close"].iloc[-1],
         "currency": stock_info["currency"],
         "grade": grade,
-        "score": score,
-        "rsi": df["RSI"].iloc[-1]
+        "score": final_score,
+        "rsi": df["RSI"].iloc[-1],
+        "news_icon": news_icon
     }
 
-# --- 5. レポート作成（2つの表を作成） ---
+# --- 6. レポート作成 ---
 def update_readme(market_status, res_us, res_jp):
     now = datetime.now().strftime("%Y-%m-%d %H:%M (UTC)")
     
-    # スコア順に並べ替え
     res_us.sort(key=lambda x: x["score"], reverse=True)
     res_jp.sort(key=lambda x: x["score"], reverse=True)
     
     def make_table(results):
         rows = ""
         for r in results:
-            rows += f"| {r['name']} | {r['currency']}{r['price']:,.0f} | **{r['grade']}** | {r['score']:.1f}% | {r['rsi']:.1f} |\n"
+            rows += f"| {r['name']} | {r['currency']}{r['price']:,.0f} | **{r['grade']}** | {r['score']:.1f}% | {r['rsi']:.1f} | {r['news_icon']} |\n"
         return rows
 
-    content = f"""# 🧠 AI Strategy Report (Dual Region)
+    content = f"""# 🧠 AI Strategy Report (News Integrated)
     
 ## 🌍 Global Market Context
 **Status:** {market_status[1]} **{market_status[0]}**
+*Checked latest news sentiment for overall market.*
 
 ---
 
 ## 🇺🇸 US & Global Growth Stocks
-| Stock | Price | Rating | Conf. | RSI |
-| :--- | :--- | :--- | :--- | :--- |
+| Stock | Price | Rating | Conf. | RSI | News |
+| :--- | :--- | :--- | :--- | :--- | :--- |
 {make_table(res_us)}
 
 ## 🇯🇵 Japan Leading Stocks
-| Stock | Price | Rating | Conf. | RSI |
-| :--- | :--- | :--- | :--- | :--- |
+| Stock | Price | Rating | Conf. | RSI | News |
+| :--- | :--- | :--- | :--- | :--- | :--- |
 {make_table(res_jp)}
+
+### 💡 Legend
+- **News:** ☀️=Positive News, ☁️=Negative News, ⚪=Neutral
+- **Conf:** Adjusted by Technicals ± News Sentiment
+- **Schedule:** Updates 4 times daily (Every 6 hours)
 
 ---
 *Updated: {now}*
