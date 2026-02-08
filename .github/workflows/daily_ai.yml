@@ -1,0 +1,28 @@
+name: Daily Stock Prediction
+
+on:
+  schedule:
+    # 毎日 日本時間 朝9:00 (UTC 0:00) に実行
+    - cron: '0 0 * * *'
+  workflow_dispatch: # 手動ボタンでも実行できるようにする設定
+
+jobs:
+  run-prediction:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: リポジトリを取得
+        uses: actions/checkout@v3
+
+      - name: Pythonをセットアップ
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+
+      - name: 必要なライブラリをインストール
+        run: |
+          pip install pandas yfinance scikit-learn
+
+      - name: 予測を実行 (predict.py)
+        run: |
+          python predict.py
