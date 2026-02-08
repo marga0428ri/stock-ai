@@ -19,9 +19,9 @@
 ## 🌎 World Market (Watchlist)
 | Action | Stock | Price | Exp. Move | Metrics (Sens/Vol) | News |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| BUY 🔵 | Eli Lilly | $1,058 | **+2.91%** | x0.95 / x1.4 | ⚪ (6) |
-| BUY 🔵 | Google | $323 | **+1.33%** | x1.02 / x1.5❗ | ⚪ (9) |
-| BUY 🔵 | Meta | $661 | **+1.14%** | x0.92 / x0.9 | ⚪ (9) |
+| BUY 🔵 | Google | $323 | **+1.79%** | x1.02 / x1.5❗ | ⚪ (9) |
+| BUY 🔵 | Eli Lilly | $1,058 | **+1.50%** | x0.95 / x1.4 | ⚪ (6) |
+| BUY 🔵 | Meta | $661 | **+1.47%** | x0.92 / x0.9 | ⚪ (9) |
 | WAIT ⚪ | Amazon | $210 | **+0.01%** | x0.88 / x3.5❗ | ⚪ (9) |
 | STRONG SELL ⚡ | Microsoft | $401 | -3.71% | x0.93 / x1.3 | ⚪ (9) |
 
@@ -44,4 +44,4 @@
 * **Sens (Sensitivity):** Learned from 2 years of history. `>1.0` means overreaction habit.
 * **Vol (Volume Shock):** `>1.5` means incident detected ❗.
 
-*Updated: 2026-02-08 03:51 (UTC)*
+*Updated: 2026-02-08 04:03 (UTC)*
