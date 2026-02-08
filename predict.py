@@ -5,15 +5,15 @@ import feedparser
 from textblob import TextBlob
 import numpy as np
 import time
-import smtplib # メール送信機能
+import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 import os
 
 # ==========================================
-# 👇 スプレッドシートのURL
+# 👇 スプレッドシートのURL (使う場合)
 # ==========================================
-SHEET_URL = "" 
+SHEET_URL = "https://docs.google.com/spreadsheets/d/10MtVu1vgAq0qJ0-O0lxHMy29_EZ7uG3-cSQlcXd0FUY/edit?usp=drivesdk" 
 
 # --- 🧪 テスト用データ ---
 TEST_PORTFOLIO = [
@@ -44,48 +44,40 @@ MARKET_JAPAN = [
 
 # --- 📧 メール通知機能 ---
 def send_email_notify(subject, body):
-    # GitHub Secretsから情報を取得
     email_from = os.environ.get("EMAIL_FROM")
     email_pass = os.environ.get("EMAIL_PASS")
     email_to = os.environ.get("EMAIL_TO")
 
     if not email_from or not email_pass or not email_to:
-        print("⚠️ メール設定が足りません。GitHub Secretsを確認してください。")
+        print("⚠️ メール設定なし。通知スキップ。")
         return
 
     try:
-        # メールの作成
         msg = MIMEMultipart()
         msg['From'] = email_from
         msg['To'] = email_to
         msg['Subject'] = f"AI Stock Alert: {subject}"
-        
-        # 本文（プレーンテキスト）
         msg.attach(MIMEText(body, 'plain'))
         
-        # Gmailのサーバーに接続して送信
         server = smtplib.SMTP('smtp.gmail.com', 587)
         server.starttls()
         server.login(email_from, email_pass)
-        text = msg.as_string()
-        server.sendmail(email_from, email_to, text)
+        server.sendmail(email_from, email_to, msg.as_string())
         server.quit()
-        
-        print("📧 レポートメールを送信しました！")
+        print("📧 メール送信完了")
     except Exception as e:
-        print(f"❌ メール送信エラー: {e}")
+        print(f"❌ メールエラー: {e}")
 
-# --- 1. ポートフォリオ読み込み ---
+# --- 1. データ読み込み ---
 def load_portfolio():
-    print("\n📦 ポートフォリオデータの読み込み...")
+    print("\n📦 ポートフォリオ読み込み...")
     portfolio = []
     if SHEET_URL:
         try:
             df = pd.read_csv(SHEET_URL)
             for index, row in df.iterrows():
                 if pd.isna(row["Ticker"]): continue
-                raw_query = str(row["Query"])
-                queries = [q.strip() for q in raw_query.split(",")]
+                queries = [q.strip() for q in str(row["Query"]).split(",")]
                 item = {
                     "ticker": str(row["Ticker"]).strip(),
                     "name": str(row["Name"]),
@@ -102,17 +94,16 @@ def load_portfolio():
 # --- 2. ニュース分析 ---
 KEYWORDS_WEIGHT = {
     "record": 2.0, "surge": 1.5, "jump": 1.5, "beat": 1.5, "approval": 2.0,
-    "buyback": 1.2, "dividend": 1.2, "acquisition": 1.5, "partnership": 1.2,
-    "launch": 1.2, "breakthrough": 1.5,
+    "buyback": 1.2, "dividend": 1.2, "partnership": 1.2, "launch": 1.2,
     "plunge": -1.5, "miss": -1.5, "drop": -1.2, "fail": -1.5, "lawsuit": -2.0,
-    "scandal": -2.5, "cut": -1.2, "downgrade": -1.5, "warn": -1.2, "investigation": -2.0
+    "scandal": -2.5, "cut": -1.2, "investigation": -2.0
 }
 
 def analyze_deep_news(queries):
     total_score = 0
     article_count = 0
     seen_titles = set()
-    print(f"   🔍 ニュース検索中 (キーワード: {queries})")
+    print(f"   🔍 ニュース検索: {queries}")
     for query in queries:
         time.sleep(1.0)
         safe_query = query.replace(" ", "+")
@@ -140,13 +131,31 @@ def analyze_deep_news(queries):
 # --- 3. データ取得 ---
 def get_market_data(ticker):
     try:
+        # 過去2年分 (730日)
         df = yf.download(ticker, period="2y", progress=False)
         if isinstance(df.columns, pd.MultiIndex):
             df.columns = df.columns.get_level_values(0)
         return df
     except: return pd.DataFrame()
 
-# --- 4. 歴史的学習 ---
+# --- 4. ★テクニカル分析 (最高値・RSI) ---
+def analyze_technical(df):
+    # RSI (14日) の計算
+    delta = df["Close"].diff()
+    gain = (delta.where(delta > 0, 0)).rolling(14).mean()
+    loss = (-delta.where(delta < 0, 0)).rolling(14).mean()
+    rs = gain / loss
+    rsi = 100 - (100 / (1 + rs))
+    current_rsi = rsi.iloc[-1]
+    
+    # 最高値からの下落率 (Drawdown) - 過去1年
+    max_price = df["Close"].rolling(252).max().iloc[-1]
+    current_price = df["Close"].iloc[-1]
+    drawdown = (current_price - max_price) / max_price # マイナスの値になる (-0.1 = -10%)
+    
+    return current_rsi, drawdown
+
+# --- 5. 歴史的学習 ---
 def calculate_sensitivity(df):
     df = df.copy()
     df["Daily_Return"] = df["Close"].pct_change()
@@ -158,7 +167,7 @@ def calculate_sensitivity(df):
     if np.isnan(correlation): correlation = 0
     return max(0.5, min(2.5, 1.0 + (correlation * 0.8)))
 
-# --- 5. 事件ベクトル ---
+# --- 6. 事件ベクトル ---
 def analyze_vectors(df):
     vol_mean = df["Volume"].rolling(20).mean()
     current_vol = df["Volume"].iloc[-1]
@@ -167,27 +176,48 @@ def analyze_vectors(df):
     if np.isnan(panic_level): panic_level = 0.015
     return vol_shock, panic_level
 
-# --- 6. 総合分析 ---
+# --- 7. 総合分析 ---
 def analyze_stock(stock_info, is_portfolio=False):
     ticker = stock_info["ticker"]
     print(f"\n🤖 分析開始: {stock_info['name']} ({ticker})")
     df = get_market_data(ticker)
-    if df.empty or len(df) < 60: return None
+    if df.empty or len(df) < 252: return None
     
+    # 各種分析
     sentiment, art_count = analyze_deep_news(stock_info["queries"])
     sensitivity = calculate_sensitivity(df)
     vol_shock, panic_level = analyze_vectors(df)
+    rsi, drawdown = analyze_technical(df) # ★追加: チャート分析
     
+    # トレンド
     sma5 = df["Close"].rolling(5).mean().iloc[-1]
     sma20 = df["Close"].rolling(20).mean().iloc[-1]
     trend = (sma5 - sma20) / sma20
     
+    # ★利益予想の計算 (RSIと最高値も考慮)★
     volume_boost = 1.5 if vol_shock > 1.5 else 1.0
+    
+    # チャート要因の補正
+    # RSI > 75 (買われすぎ) なら下落圧力、RSI < 30 (売られすぎ) なら上昇圧力
+    rsi_pressure = 0
+    if rsi > 75: rsi_pressure = -0.5
+    elif rsi < 30: rsi_pressure = 0.5
+    
+    # 最高値に近い(Drawdown > -0.05)なら、ブレイクアウト期待でプラス
+    # 逆に大きく落ちている(-0.3)なら、反発期待でプラス
+    # 中途半端(-0.15)な位置が一番動きにくい
+    drawdown_factor = 0
+    if drawdown > -0.05: drawdown_factor = 0.2 # 高値更新期待
+    elif drawdown < -0.30: drawdown_factor = 0.3 # バーゲンセール
+    
+    # 最終スコア
     impact_power = sentiment * panic_level * sensitivity * volume_boost * 4.0
-    exp_profit_pct = (trend * 0.2) + impact_power
+    exp_profit_pct = (trend * 0.2) + impact_power + (rsi_pressure * 0.01) + (drawdown_factor * 0.01)
     exp_profit_pct = max(-0.15, min(0.15, exp_profit_pct)) * 100
-    print(f"      💰 予想利益率: {exp_profit_pct:+.2f}%")
+    
+    print(f"      💰 予想: {exp_profit_pct:+.2f}% (RSI:{rsi:.0f}, Drop:{drawdown*100:.1f}%)")
 
+    # アクション判定
     ai_action = "WAIT"
     if exp_profit_pct > 1.0: ai_action = "BUY"
     if exp_profit_pct > 3.0: ai_action = "STRONG BUY"
@@ -197,7 +227,6 @@ def analyze_stock(stock_info, is_portfolio=False):
     current_price = df["Close"].iloc[-1]
     portfolio_advice = ""
     profit_loss = 0
-    profit_loss_pct = 0
     
     if is_portfolio:
         buy_price = stock_info["buy_price"]
@@ -205,13 +234,17 @@ def analyze_stock(stock_info, is_portfolio=False):
         profit_loss = (current_price - buy_price) * amount
         profit_loss_pct = (current_price - buy_price) / buy_price * 100
         
+        # アドバイスロジック (RSIも考慮)
         if "BUY" in ai_action:
             if profit_loss > 0: portfolio_advice = "Extend Gains"
             else: portfolio_advice = "Buy Dip"
         elif "SELL" in ai_action:
             if profit_loss > 0: portfolio_advice = "Take Profit"
             else: portfolio_advice = "Stop Loss"
-        else: portfolio_advice = "Watch"
+        else:
+            # RSIが高すぎる場合の警告
+            if rsi > 80: portfolio_advice = "Overheated (Caution)"
+            else: portfolio_advice = "Watch"
 
     vol_icon = "❗" if vol_shock > 1.5 else ""
     news_icon = "☀️" if sentiment > 0.3 else ("☁️" if sentiment < -0.3 else "⚪")
@@ -228,70 +261,73 @@ def analyze_stock(stock_info, is_portfolio=False):
         "sensitivity": sensitivity,
         "vol_shock": vol_shock,
         "vol_icon": vol_icon,
+        "rsi": rsi,
+        "drawdown": drawdown * 100, # %表示
         "pl_amount": profit_loss,
-        "pl_pct": profit_loss_pct,
+        "pl_pct": profit_loss_pct if is_portfolio else 0,
         "advice": portfolio_advice
     }
 
-# --- 7. レポート作成 & メール通知 ---
+# --- 8. レポート作成 & 通知 ---
 def update_readme_and_notify(my_results, world_results, japan_results):
     now = datetime.now().strftime("%Y-%m-%d %H:%M (UTC)")
     total_pl_usd = sum([r["pl_amount"] for r in my_results if r["currency"] == "$"])
     total_pl_jpy = sum([r["pl_amount"] for r in my_results if r["currency"] == "¥"])
 
-    # メール本文の作成
+    # メール作成
     email_body = f"AI Stock Report - {now}\n\n"
     notify_needed = False
 
-    # 自分のポートフォリオ
-    email_body += "--- 💰 Your Portfolio ---\n"
+    email_body += "--- 💰 Portfolio Check ---\n"
     for r in my_results:
-        # 警告条件: 強いシグナル or 出来高異常 or ポートフォリオへの重要アドバイス
-        if "STRONG" in r["action"] or r["vol_shock"] > 1.5 or "Stop Loss" in r["advice"] or "Take Profit" in r["advice"]:
+        if "STRONG" in r["action"] or r["vol_shock"] > 1.5 or r["rsi"] > 80 or r["rsi"] < 20:
             notify_needed = True
             
         pl_mark = "🟢" if r["pl_amount"] > 0 else "🔴"
         email_body += f"■ {r['name']}: {r['action']} ({r['advice']})\n"
         email_body += f"   P/L: {r['currency']}{r['pl_amount']:+,.0f} {pl_mark}\n"
-        email_body += f"   Exp: {r['exp_profit']:+.2f}% / Vol: x{r['vol_shock']:.1f}\n\n"
+        email_body += f"   RSI: {r['rsi']:.0f} / Drop: {r['drawdown']:.1f}%\n\n"
 
-    # 市場のチャンス
-    email_body += "--- 🌍 Market Opportunities ---\n"
+    email_body += "--- 🌍 Market Watch ---\n"
     for r in world_results + japan_results:
         if "STRONG" in r["action"]:
             notify_needed = True
             email_body += f"★ {r['name']}: {r['action']} (Exp: {r['exp_profit']:+.2f}%)\n"
 
-    # 重要事項があればメール送信
     if notify_needed:
-        print("🔔 重要なシグナルあり。メール送信します。")
+        print("🔔 通知条件クリア: メール送信")
         send_email_notify("Important Market Updates", email_body)
     else:
-        print("⚪ 平穏な市場です。メール通知はスキップします。")
+        print("⚪ 通知なし")
 
-    # README更新（表示用）
+    # README更新
     def make_table(results, table_type):
-        if not results: return "No data available."
+        if not results: return "No data."
         if table_type == "MY_PORTFOLIO":
-            header = "| Action | Stock | Your P/L | Advice | Exp. Move | Metrics (Sens/Vol) |\n| :--- | :--- | :--- | :--- | :--- | :--- |\n"
+            header = "| Action | Stock | Your P/L | Advice | Exp. Move | Chart (RSI/Drop) |\n| :--- | :--- | :--- | :--- | :--- | :--- |\n"
         else:
-            header = "| Action | Stock | Price | Exp. Move | Metrics (Sens/Vol) | News |\n| :--- | :--- | :--- | :--- | :--- | :--- |\n"
+            header = "| Action | Stock | Price | Exp. Move | Chart (RSI/Drop) | News |\n| :--- | :--- | :--- | :--- | :--- | :--- |\n"
         rows = ""
         results.sort(key=lambda x: x["exp_profit"], reverse=True)
         for r in results:
             prof_str = f"{r['exp_profit']:+.2f}%"
             if r['exp_profit'] > 0: prof_str = f"**{prof_str}**"
-            metrics = f"x{r['sensitivity']:.2f} / x{r['vol_shock']:.1f}{r['vol_icon']}"
+            
+            # Chart Metrics (RSIと下落率)
+            chart_metrics = f"RSI:{r['rsi']:.0f} / Drop:{r['drawdown']:.1f}%"
+            if r['rsi'] > 75: chart_metrics += " 🔥" # 加熱
+            if r['rsi'] < 30: chart_metrics += " 💎" # バーゲン
+            
             if table_type == "MY_PORTFOLIO":
                 pl_str = f"{r['currency']}{r['pl_amount']:+,.0f} ({r['pl_pct']:+.1f}%)"
                 if r['pl_amount'] > 0: pl_str = f"**{pl_str}** 🟢"
                 else: pl_str = f"{pl_str} 🔴"
-                rows += f"| {r['action']} | {r['name']} | {pl_str} | **{r['advice']}** | {prof_str} | {metrics} |\n"
+                rows += f"| {r['action']} | {r['name']} | {pl_str} | **{r['advice']}** | {prof_str} | {chart_metrics} |\n"
             else:
-                rows += f"| {r['action']} | {r['name']} | {r['currency']}{r['price']:,.0f} | {prof_str} | {metrics} | {r['news_icon']} ({r['articles']}) |\n"
+                rows += f"| {r['action']} | {r['name']} | {r['currency']}{r['price']:,.0f} | {prof_str} | {chart_metrics} | {r['news_icon']} ({r['articles']}) |\n"
         return header + rows
 
-    content = f"""# 🏛️ Deep Impact Portfolio
+    content = f"""# 🏛️ Deep Impact Portfolio (Chart Master)
 *Updated: {now}*
 
 ## 💰 My Assets
@@ -305,6 +341,14 @@ def update_readme_and_notify(my_results, world_results, japan_results):
 ---
 ## 🇯🇵 Japan Market
 {make_table(japan_results, "MARKET")}
+
+---
+### 💡 Guide
+* **RSI (0-100):**
+    * `>70`: Overheated 🔥 (Risk of drop).
+    * `<30`: Oversold 💎 (Chance to buy).
+* **Drop (Drawdown):** How much % down from 1-year High.
+* **Advice:** AI combines News, Trends, and Chart Levels.
 """
     with open("README.md", "w", encoding="utf-8") as f:
         f.write(content)
