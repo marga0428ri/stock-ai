@@ -1,27 +1,33 @@
-# 🧠 AI Investment Strategy Report (Technical Ver.)
+# 🧠 AI Strategy Report (Dual Region)
     
-## 🌍 Market Context
-**Status:** 🐻⚠️ **Bear Trend (Negative)**
-(Analyzed via RSI & MACD of S&P 500)
+## 🌍 Global Market Context
+**Status:** ⚖️ **Neutral / Stable**
 
 ---
 
-## 🎯 Individual Stock Predictions (5-Day Horizon)
-*Updated: 2026-02-08 02:15:00 (UTC)*
-
-| Ticker | Price | Prediction | Probability (Up) | RSI (Heat) |
+## 🇺🇸 US & Global Growth Stocks
+| Stock | Price | Rating | Conf. | RSI |
 | :--- | :--- | :--- | :--- | :--- |
-| AAPL | $278.12 | **DOWN ↘️** | 30.2% | 74.2 |
-| NVDA | $185.41 | **NEUTRAL ➡️** | 48.0% | 49.3 |
-| MSFT | $401.14 | **WEAK UP ↗️** | 52.6% | 31.0 |
-| TSLA | $411.11 | **DOWN ↘️** | 33.7% | 40.8 |
-| GOOGL | $322.86 | **NEUTRAL ➡️** | 42.7% | 43.7 |
-| AMZN | $210.32 | **NEUTRAL ➡️** | 49.9% | 27.8 |
+| Microsoft | $401 | **S 🚀** | 67.5% | 31.0 |
+| Google | $323 | **A ↗️** | 53.1% | 43.7 |
+| Apple | $278 | **A ↗️** | 51.6% | 74.2 |
+| NVIDIA | $185 | **B ➡️** | 49.7% | 49.3 |
+| Tesla | $411 | **B ➡️** | 44.5% | 40.8 |
+| Amazon | $210 | **B ➡️** | 44.3% | 27.8 |
+| Eli Lilly | $1,058 | **B ➡️** | 41.6% | 52.5 |
 
 
-- **RSI > 70:** Overbought (High risk of drop)
-- **RSI < 30:** Oversold (Chance of bounce)
-- **Probability:** >60% is a strong signal.
+## 🇯🇵 Japan Leading Stocks
+| Stock | Price | Rating | Conf. | RSI |
+| :--- | :--- | :--- | :--- | :--- |
+| Tokyo Electron | ¥41,030 | **A ↗️** | 53.2% | 46.2 |
+| Keyence | ¥53,260 | **B ➡️** | 40.3% | 18.0 |
+| Fast Retailing | ¥63,500 | **C ↘️** | 37.8% | 55.1 |
+| SoftBank G | ¥3,999 | **C ↘️** | 36.6% | 50.4 |
+| Sony Group | ¥3,507 | **C ↘️** | 34.9% | 34.6 |
+| Nintendo | ¥8,441 | **C ↘️** | 29.1% | 20.9 |
+| Toyota | ¥3,780 | **C ↘️** | 28.7% | 58.6 |
+
 
 ---
-*Powered by GitHub Actions*
+*Updated: 2026-02-08 02:23 (UTC)*
