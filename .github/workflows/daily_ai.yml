@@ -2,7 +2,8 @@ name: Daily Stock Prediction
 
 on:
   schedule:
-    - cron: '0 0 * * *' # 毎日UTC0時（日本時間朝9時）に実行
+    # 6時間おきに実行 (0時, 6時, 12時, 18時 UTC)
+    - cron: '0 */6 * * *'
   workflow_dispatch: # 手動実行ボタン
 
 permissions:
