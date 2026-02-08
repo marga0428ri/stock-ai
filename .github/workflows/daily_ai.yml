@@ -2,8 +2,7 @@ name: Deep Stock Analysis
 
 on:
   schedule:
-    # ⏱️ 1日4回実行 (0時, 6時, 12時, 18時 UTC)
-    # 日本時間だと 朝9時, 15時, 21時, 深夜3時 になります
+    # ⏱️ 1日4回実行
     - cron: '0 */6 * * *'
   workflow_dispatch:
 
@@ -13,7 +12,7 @@ permissions:
 jobs:
   run-prediction:
     runs-on: ubuntu-latest
-    timeout-minutes: 15 # 分析時間を長めに確保
+    timeout-minutes: 15
 
     steps:
       - name: Checkout repository
@@ -25,10 +24,14 @@ jobs:
           python-version: '3.9'
 
       - name: Install dependencies
-        # 必要なライブラリを一括インストール
         run: pip install pandas yfinance scikit-learn feedparser textblob numpy
 
       - name: Run Deep Analysis
+        env:
+          # ★ここでSecretsからメール情報を受け取ります
+          EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
+          EMAIL_PASS: ${{ secrets.EMAIL_PASS }}
+          EMAIL_TO: ${{ secrets.EMAIL_TO }}
         run: python predict.py
 
       - name: Commit and Push results
