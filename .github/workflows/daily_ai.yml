@@ -2,12 +2,13 @@ name: Daily Stock Prediction
 
 on:
   schedule:
-    # 6時間おきに実行 (0時, 6時, 12時, 18時 UTC)
+    # ⏱️ 1日4回実行 (UTC 0, 6, 12, 18時)
+    # 日本時間だと 朝9時, 15時, 21時, 深夜3時 になります
     - cron: '0 */6 * * *'
-  workflow_dispatch: # 手動実行ボタン
+  workflow_dispatch:
 
 permissions:
-  contents: write  # ★ここが最重要！「書き込み許可」を与える行
+  contents: write
 
 jobs:
   run-prediction:
@@ -23,7 +24,11 @@ jobs:
           python-version: '3.9'
 
       - name: Install dependencies
-        run: pip install pandas yfinance scikit-learn
+        # 📚 ニュースを読むための 'feedparser' と 'textblob' を追加！
+        run: pip install pandas yfinance scikit-learn feedparser textblob
+
+      - name: Download Corpora for Sentiment Analysis
+        run: python -m textblob.download_corpora
 
       - name: Run prediction
         run: python predict.py
@@ -33,5 +38,5 @@ jobs:
           git config --global user.name "GitHub Actions"
           git config --global user.email "actions@github.com"
           git add README.md
-          # 変更がある時だけコミットする設定
-          git diff --quiet && git diff --staged --quiet || (git commit -m "Update prediction results" && git push)
+          # 変更がなくてもエラーにしないおまじない
+          git diff --quiet && git diff --staged --quiet || (git commit -m "Update prediction with News" && git push)
