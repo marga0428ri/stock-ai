@@ -1,5 +1,5 @@
 # 📊 AI Strategy Dashboard
-*Update: 2026-05-06 03:54 (UTC)*
+*Update: 2026-05-06 08:38 (UTC)*
 
 ## 💰 My Portfolio
 **Total:** $+0 / ¥+0
@@ -12,11 +12,11 @@
 ## 🌎 World Giants
 | Signal | Stock | Price | Exp. | Analysis |
 | :---: | :--- | :--- | :--- | :--- |
-| 🚀 STRONG BUY | **Amazon** | $274 | **+5.54%** | ☀️ (6)<br>RSI: 82 |
-| 🚀 STRONG BUY | **Meta** | $605 | **+4.29%** | ☀️ (6)<br>RSI: 28 |
-| 🚀 STRONG BUY | **Eli Lilly** | $989 | **+3.96%** | ☀️ (4)<br>RSI: 65 |
-| 🔵 BUY | **Microsoft** | $411 | **+1.50%** | ⚪ (6)<br>RSI: 50 |
-| 🔵 BUY | **Google** | $388 | **+1.42%** | ⚪ (6)<br>RSI: 82 |
+| 🚀 STRONG BUY | **Amazon** | $274 | **+4.14%** | ☀️ (6)<br>RSI: 82 |
+| 🚀 STRONG BUY | **Google** | $388 | **+3.60%** | ⚪ (6)<br>RSI: 82 |
+| 🚀 STRONG BUY | **Eli Lilly** | $989 | **+3.26%** | ⚪ (5)<br>RSI: 65 |
+| 🚀 STRONG BUY | **Meta** | $605 | **+3.07%** | ☀️ (6)<br>RSI: 28 |
+| 🔵 BUY | **Microsoft** | $411 | **+2.88%** | ☀️ (6)<br>RSI: 50 |
 
 
 ## 🇯🇵 Japan Leading
