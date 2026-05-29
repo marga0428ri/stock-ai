@@ -1,5 +1,5 @@
 # 📊 AI Strategy Dashboard
-*Update: 2026-05-29 10:08 (UTC)*
+*Update: 2026-05-29 16:01 (UTC)*
 
 ## 💰 My Portfolio
 **Total:** $+0 / ¥+0
@@ -12,18 +12,18 @@
 ## 🌎 World Giants
 | Signal | Stock | Price | Exp. | Analysis |
 | :---: | :--- | :--- | :--- | :--- |
-| 🚀 STRONG BUY | **Eli Lilly** | $1,127 | **+4.19%** | ☀️ (5)<br>RSI: 79 |
-| 🚀 STRONG BUY | **Meta** | $635 | **+3.86%** | ☀️ (6)<br>RSI: 61 |
-| 🔵 BUY | **Microsoft** | $427 | **+2.22%** | ☀️ (6)<br>RSI: 55 |
-| 🔵 BUY | **Amazon** | $274 | **+1.52%** | ⚪ (6)<br>RSI: 53 |
-| 🔵 BUY | **Google** | $390 | **+1.34%** | ⚪ (6)<br>RSI: 44 |
+| 🔵 BUY | **Microsoft** | $443 | **+1.71%** | ⚪ (6)<br>RSI: 69 |
+| 🔵 BUY | **Amazon** | $273 | **+1.69%** | ☀️ (6)<br>RSI: 50 |
+| 🔵 BUY | **Google** | $382 | **+1.09%** | ⚪ (6)<br>RSI: 36 |
+| ⚪ WAIT | **Eli Lilly** | $1,095 | **+0.91%** | ⚪ (5)<br>RSI: 77 |
+| ⚪ WAIT | **Meta** | $628 | **+0.86%** | ⚪ (6)<br>RSI: 60 |
 
 
 ## 🇯🇵 Japan Leading
 | Signal | Stock | Price | Exp. | Analysis |
 | :---: | :--- | :--- | :--- | :--- |
-| 🚀 STRONG BUY | **三菱UFJ** | ¥2,999 | **+6.96%** | ☀️ (3)<br>RSI: 62 |
-| 🚀 STRONG BUY | **リクルート** | ¥10,570 | **+6.62%** | ⚪ (3)<br>RSI: 87 |
-| 🔵 BUY | **キーエンス** | ¥80,110 | **+2.89%** | ⚪ (1)<br>RSI: 46 |
-| ⚪ WAIT | **ファストリ** | ¥82,330 | **+0.90%** | ⚪ (0)<br>RSI: 67 |
-| ⚪ WAIT | **東エレク** | ¥52,420 | **+0.86%** | ⚪ (0)<br>RSI: 51 |
+| 🚀 STRONG BUY | **東エレク** | ¥nan | **+15.00%** | ⚪ (0)<br>RSI: 51 |
+| 🚀 STRONG BUY | **ファストリ** | ¥nan | **+15.00%** | ⚪ (0)<br>RSI: 59 |
+| 🚀 STRONG BUY | **キーエンス** | ¥nan | **+15.00%** | ⚪ (1)<br>RSI: 33 |
+| 🚀 STRONG BUY | **リクルート** | ¥nan | **+15.00%** | ⚪ (3)<br>RSI: 85 |
+| 🚀 STRONG BUY | **三菱UFJ** | ¥nan | **+15.00%** | ⚪ (3)<br>RSI: 60 |
